@@ -5,23 +5,12 @@ mod user;
 use queries::*;
 
 use axum::{
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router,
 };
-use firestore::FirestoreDb;
 use http::{header, HeaderName, HeaderValue, Method};
-use once_cell::sync::Lazy;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tokio::sync::OnceCell;
 use tower_http::cors::CorsLayer;
-
-pub static DB: Lazy<OnceCell<FirestoreDb>> = Lazy::new(|| OnceCell::new());
-
-const METADATA: &'static str = "metadata";
-
-pub async fn init_database() -> FirestoreDb {
-    FirestoreDb::new("ece-461-dev").await.unwrap()
-}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -43,9 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(get_package_by_name).delete(delete_package_by_name),
         )
         .route("/package/byRegEx", get(get_package_by_regex))
+        .route("/reset", delete(reset_registry))
         .layer(
             CorsLayer::new()
-                .allow_origin("https://web.gcp.sammelson.com".parse::<HeaderValue>().unwrap())
+                .allow_origin(HeaderValue::from_static("https://web.gcp.sammelson.com"))
                 .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("offset")])
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]),
         );
