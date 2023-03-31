@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::{init_database, DB, METADATA};
 use crate::{package::*, user::*};
 
@@ -9,16 +12,21 @@ use http::{header, StatusCode};
 
 /// helper function because can't do
 /// `impl<T> IntoResponse for T where T: Serialize`
-fn serialize(data: impl serde::Serialize) -> impl IntoResponse {
+fn serialize(data: impl serde::Serialize) -> String {
     serde_json::to_string(&data).unwrap()
 }
 
 /// helper function for constructing common use case of returning status ok with json body
-fn ok(data: impl serde::Serialize) -> impl IntoResponse {
+fn ok(
+    data: impl serde::Serialize,
+) -> (StatusCode, [(header::HeaderName, &'static str); 1], String) {
     respond(StatusCode::OK, data)
 }
 
-fn respond(code: StatusCode, data: impl serde::Serialize) -> impl IntoResponse {
+fn respond(
+    code: StatusCode,
+    data: impl serde::Serialize,
+) -> (StatusCode, [(header::HeaderName, &'static str); 1], String) {
     (
         code,
         [(header::CONTENT_TYPE, "application/json")],
