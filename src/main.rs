@@ -1,47 +1,40 @@
-use hyper::{
-    server::conn::AddrStream,
-    service::{make_service_fn, service_fn},
-    Body, Request, Response, Server,
-};
-use std::convert::Infallible;
-use std::env;
+mod package;
+mod queries;
+mod user;
 
-#[tokio::main]
-async fn main() {
-    pretty_env_logger::init();
+use actix_cors::Cors;
+use actix_web::{http, App, HttpServer};
 
-    let mut port: u16 = 8080;
-    match env::var("PORT") {
-        Ok(p) => {
-            match p.parse::<u16>() {
-                Ok(n) => {
-                    port = n;
-                }
-                Err(_e) => {}
-            };
-        }
-        Err(_e) => {}
-    };
-    let addr = ([0, 0, 0, 0], port).into();
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| {
+        let cors = Cors::default()
+            .allowed_origin("https://web.gcp.sammelson.com")
+            .allowed_methods(vec![
+                http::Method::DELETE,
+                http::Method::GET,
+                http::Method::POST,
+                http::Method::PUT,
+            ])
+            .allowed_header("X-Authorization")
+            .allowed_header("offset")
+            .max_age(3600);
 
-    let make_svc = make_service_fn(|_socket: &AddrStream| async move {
-        Ok::<_, Infallible>(service_fn(move |_: Request<Body>| async move {
-            let mut hello = "Hello ".to_string();
-            match env::var("TARGET") {
-                Ok(target) => {
-                    hello.push_str(&target);
-                }
-                Err(_e) => hello.push_str("World"),
-            };
-            hello.push_str("?");
-            Ok::<_, Infallible>(Response::new(Body::from(hello)))
-        }))
-    });
-
-    let server = Server::bind(&addr).serve(make_svc);
-
-    println!("Listening on http://{}", addr);
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
-    }
+        App::new()
+            .service(queries::authenticate)
+            .service(queries::post_package)
+            .service(queries::reset_registry)
+            .service(queries::search_packages)
+            .service(queries::get_rating_by_id)
+            .service(queries::get_package_by_id)
+            .service(queries::get_package_by_name)
+            .service(queries::update_package_by_id)
+            .service(queries::delete_package_by_id)
+            .service(queries::get_package_by_regex)
+            .service(queries::delete_package_by_name)
+            .wrap(cors)
+    })
+    .bind(("0.0.0.0", 8080))?
+    .run()
+    .await
 }
