@@ -11,9 +11,11 @@ firestore = "0.30"
 futures = "0.3.28"
 http = "0.2"
 hyper = { version = "0.14", features = ["full"] }
+log = "0.4"
 once_cell = "1.17.1"
+pretty_env_logger = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = {version = "1", features = ["full"] }
+tokio = {version = "1", features = ["rt", "io-std", "sync"] }
 tower-http = { version = "0.4.0", features = ["cors"] }
 uuid = { version = "1", features = ["v4", "serde"] }

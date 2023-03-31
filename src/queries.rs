@@ -1,13 +1,10 @@
-use crate::package::*;
-use crate::user::*;
-use crate::{DB, METADATA};
+use crate::{init_database, DB, METADATA};
+use crate::{package::*, user::*};
 
 use axum::{
     extract::{Json, Path},
     response::IntoResponse,
 };
-use firestore::*;
-use futures::{future, stream::BoxStream, StreamExt};
 use http::{header, StatusCode};
 
 /// helper function because can't do
@@ -81,90 +78,87 @@ pub async fn delete_package_by_id(Path(_id): Path<PackageId>) -> impl IntoRespon
     StatusCode::NOT_IMPLEMENTED
 }
 
-pub async fn post_package(Json(to_upload): Json<Package>) -> Result<impl IntoResponse, StatusCode> {
+pub async fn post_package(
+    Json(Package { mut metadata, data }): Json<Package>,
+) -> Result<impl IntoResponse, StatusCode> {
     // not yet implemeted:
     // 403: auth failed
     // 424: failed due to bad rating
-    let prev_versions: BoxStream<PackageMetadata> = DB
+    let db = DB.get_or_init(init_database).await;
+
+    let prev_versions_count = db
         .fluent()
         .select()
         .from(METADATA)
         .filter(|q| {
-            q.field(path!(PackageMetadata::name))
-                .eq(&to_upload.metadata.name)
+            q.for_all([
+                q.field("Name").eq(&metadata.name),
+                q.field("Version").eq(&metadata.version),
+            ])
         })
-        .obj()
-        .stream_query()
+        .limit(1)
+        .query()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .len();
 
-    if prev_versions
-        .filter(|m| future::ready(m.version == to_upload.metadata.version))
-        .count()
-        .await
-        >= 1
-    {
+    if prev_versions_count >= 1 {
         // 409: package already exists
+        log::info!("Failing package upload due to at least one matching package");
         return Err(StatusCode::CONFLICT);
     }
 
-    let id = PackageId::new();
-    let _: PackageMetadata = DB
-        .fluent()
+    metadata.id = PackageId::new();
+
+    db.fluent()
         .insert()
         .into(METADATA)
-        .document_id(id.to_string())
-        .object(&to_upload.metadata)
+        .document_id(metadata.id.to_string())
+        .object(&metadata)
         .execute()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    log::info!(
+        "Successfully uploaded new package with id {}",
+        metadata.id.to_string()
+    );
     // 201: return package, with correct ID
-    Ok(respond(
-        StatusCode::CREATED,
-        Package {
-            metadata: PackageMetadata {
-                id,
-                ..to_upload.metadata
-            },
-            ..to_upload
-        },
-    ))
+    Ok(ok(Package { metadata, data }))
 }
 
-// TODO
 pub async fn get_rating_by_id(Path(_id): Path<PackageId>) -> impl IntoResponse {
     // 200: return rating iff all rated
     // 404: does not exist
     // 500: package rating error
-    ok(PackageRating::default())
+    respond(StatusCode::NOT_IMPLEMENTED, PackageRating::default())
 }
 
 /// Create an access token.
-// TODO
 pub async fn authenticate(Json(auth): Json<AuthenticationRequest>) -> impl IntoResponse {
     // 200: return token
     // 401: invalid user/password
     // 501: not implemented
-    ok(AuthenticationToken::new(auth))
+    respond(StatusCode::NOT_IMPLEMENTED, AuthenticationToken::new(auth))
 }
 
 /// Return the history of this package (all versions).
-// TODO
 pub async fn get_package_by_name(Path(name): Path<String>) -> impl IntoResponse {
     // 200: return package history
     // 404: does not exist
-    ok(vec![PackageHistoryEntry {
-        metadata: PackageMetadata {
-            name,
+    respond(
+        StatusCode::NOT_IMPLEMENTED,
+        vec![PackageHistoryEntry {
+            metadata: PackageMetadata {
+                name,
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    }])
+        }],
+    )
 }
 
 /// Delete all versions of this package.
-// TODO
 pub async fn delete_package_by_name(Path(_name): Path<String>) -> impl IntoResponse {
     // 200: package deleted
     // 404: does not exist
@@ -174,9 +168,11 @@ pub async fn delete_package_by_name(Path(_name): Path<String>) -> impl IntoRespo
 /// Get any packages fitting the regular expression.
 ///
 /// Search for a package using regular expression over package names and READMEs.
-// TODO
 pub async fn get_package_by_regex(_regex: String) -> impl IntoResponse {
     // 200: return list of packages
     // 404: no packages found
-    ok(vec![PackageMetadata::default()])
+    respond(
+        StatusCode::NOT_IMPLEMENTED,
+        vec![PackageMetadata::default()],
+    )
 }

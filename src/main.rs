@@ -5,27 +5,27 @@ mod user;
 use queries::*;
 
 use axum::{
-    http::{header, HeaderValue, Method},
     routing::{get, post, put},
     Router,
 };
 use firestore::FirestoreDb;
-use http::HeaderName;
+use http::{header, HeaderName, HeaderValue, Method};
 use once_cell::sync::Lazy;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use tokio::sync::OnceCell;
 use tower_http::cors::CorsLayer;
 
-pub static DB: Lazy<FirestoreDb> =
-    Lazy::new(|| futures::executor::block_on(async { init_database().await }));
+pub static DB: Lazy<OnceCell<FirestoreDb>> = Lazy::new(|| OnceCell::new());
 
 const METADATA: &'static str = "metadata";
 
-async fn init_database() -> FirestoreDb {
+pub async fn init_database() -> FirestoreDb {
     FirestoreDb::new("ece-461-dev").await.unwrap()
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    pretty_env_logger::init();
     // build our application with a single route
     let app = Router::new()
         .route("/package", post(queries::post_package))
