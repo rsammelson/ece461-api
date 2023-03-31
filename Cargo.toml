@@ -19,3 +19,6 @@ serde_json = "1"
 tokio = {version = "1", features = ["rt", "io-std", "sync"] }
 tower-http = { version = "0.4.0", features = ["cors"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+strum = { version = "0.24", features = ["derive"] }

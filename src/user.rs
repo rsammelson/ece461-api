@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 pub struct AuthenticationRequest {
     #[serde(rename = "User")]
     pub user: User,
@@ -8,7 +8,7 @@ pub struct AuthenticationRequest {
     pub secret: Secret,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
     #[serde(rename = "Name")]
     pub name: String,
@@ -16,12 +16,12 @@ pub struct User {
     pub is_admin: bool,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Default, PartialEq, Eq, Debug, Deserialize)]
 pub struct Secret {
     pub password: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthenticationToken(String);
 
 impl AuthenticationToken {

@@ -1,10 +1,13 @@
+#[cfg(test)]
+mod tests;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::user::User;
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PackageMetadata {
     #[serde(rename = "Name")]
     pub name: String,
@@ -14,12 +17,18 @@ pub struct PackageMetadata {
     pub id: PackageId,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageId(Uuid);
 
 impl PackageId {
     pub fn new() -> Self {
         PackageId(Uuid::new_v4())
+    }
+}
+
+impl From<Uuid> for PackageId {
+    fn from(value: Uuid) -> Self {
+        PackageId(value)
     }
 }
 
@@ -29,23 +38,29 @@ impl ToString for PackageId {
     }
 }
 
-#[derive(Default, Deserialize, Serialize)]
-pub struct PackageData {
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub enum PackageData {
     #[serde(rename = "Content")]
-    pub content: String,
+    Content(String),
     #[serde(rename = "URL")]
-    pub url: String,
+    Url(String),
     #[serde(rename = "JSProgram")]
-    pub js_program: String,
+    JsProgram(String),
 }
 
-#[derive(Default, Deserialize, Serialize)]
+impl Default for PackageData {
+    fn default() -> Self {
+        PackageData::Content(Default::default())
+    }
+}
+
+#[derive(Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Package {
     pub metadata: PackageMetadata,
     pub data: PackageData,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 pub struct SearchQuery {
     #[serde(rename = "Name")]
     pub name: String,
@@ -53,7 +68,7 @@ pub struct SearchQuery {
     pub version: Option<String>,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Default, Debug, PartialEq, Eq, Serialize)]
 pub struct PackageHistoryEntry {
     #[serde(rename = "User")]
     pub user: User,
@@ -65,7 +80,8 @@ pub struct PackageHistoryEntry {
     pub action: PackageHistoryAction,
 }
 
-#[derive(Default, Serialize)]
+#[cfg_attr(test, derive(strum::EnumIter))]
+#[derive(Default, Debug, PartialEq, Eq, Serialize)]
 pub enum PackageHistoryAction {
     #[default]
     #[serde(rename = "CREATE")]
@@ -78,7 +94,7 @@ pub enum PackageHistoryAction {
     Rate,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Default, Debug, Serialize)]
 pub struct PackageRating {
     #[serde(rename = "BusFactor")]
     pub bus_factor: f64,
