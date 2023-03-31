@@ -1,0 +1,6 @@
+steps:
+  - name: "gcr.io/kaniko-project/executor:latest"
+    args:
+      - --destination=us-central1-docker.pkg.dev/ece-461-dev/cloud-run-source-deploy/ece461-api/ece461-api
+      - --cache=true
+      - --cache-ttl=72h

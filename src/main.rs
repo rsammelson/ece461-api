@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/package/byRegEx", get(get_package_by_regex))
         .layer(
             CorsLayer::new()
-                .allow_origin("http://localhost:8000".parse::<HeaderValue>().unwrap())
+                .allow_origin("https://web.gcp.sammelson.com".parse::<HeaderValue>().unwrap())
                 .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("offset")])
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]),
         );
