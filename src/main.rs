@@ -5,6 +5,18 @@ mod user;
 use actix_cors::Cors;
 use actix_web::{http, App, HttpServer};
 
+use firestore::FirestoreDb;
+use once_cell::sync::Lazy;
+
+pub static DB: Lazy<FirestoreDb> =
+    Lazy::new(|| futures::executor::block_on(async { init_database().await }));
+
+const METADATA: &'static str = "metadata";
+
+async fn init_database() -> FirestoreDb {
+    FirestoreDb::new("ece-461-dev").await.unwrap()
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {

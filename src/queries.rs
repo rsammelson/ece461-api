@@ -1,7 +1,10 @@
-use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
-
 use crate::package::*;
 use crate::user::*;
+use crate::{DB, METADATA};
+
+use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
+use firestore::*;
+use futures::{future, stream::BoxStream, StreamExt};
 
 /// Get the packages from the registry.
 ///
@@ -65,18 +68,61 @@ pub async fn delete_package_by_id(_id: web::Path<PackageId>) -> impl Responder {
 
 #[post("/package")]
 pub async fn post_package(to_upload: web::Json<Package>) -> impl Responder {
-    // 201: return package, with correct ID
+    // not yet implemeted:
     // 403: auth failed
-    // 409: package already exists
     // 424: failed due to bad rating
     let to_upload = to_upload.into_inner();
-    HttpResponse::NotImplemented().json(Package {
-        metadata: PackageMetadata {
-            id: "changed_id".to_string(),
-            ..to_upload.metadata
-        },
-        ..to_upload
-    })
+
+    let prev_versions: FirestoreResult<BoxStream<PackageMetadata>> = DB
+        .fluent()
+        .select()
+        .from(METADATA)
+        .filter(|q| {
+            q.field(path!(PackageMetadata::name))
+                .eq(&to_upload.metadata.name)
+        })
+        .obj()
+        .stream_query()
+        .await;
+
+    let prev_versions = match prev_versions {
+        Ok(p) => p,
+        // 500: ??? some database error
+        Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
+    };
+
+    if prev_versions
+        .filter(|m| future::ready(m.version == to_upload.metadata.version))
+        .count()
+        .await
+        >= 1
+    {
+        // 409: package already exists
+        return HttpResponse::Conflict().finish();
+    }
+
+    let id = PackageId::new();
+    let response: FirestoreResult<PackageMetadata> = DB
+        .fluent()
+        .insert()
+        .into(METADATA)
+        .document_id(id.to_string())
+        .object(&to_upload.metadata)
+        .execute()
+        .await;
+
+    match response {
+        // 201: return package, with correct ID
+        Ok(PackageMetadata { id, .. }) => HttpResponse::Created().json(Package {
+            metadata: PackageMetadata {
+                id,
+                ..to_upload.metadata
+            },
+            ..to_upload
+        }),
+        // 500: ??? some database error
+        Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+    }
 }
 
 #[get("/package/{id}/rate")]

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::user::User;
 
@@ -10,7 +11,22 @@ pub struct PackageMetadata {
     #[serde(rename = "Version")]
     pub version: String,
     #[serde(rename = "ID")]
-    pub id: String,
+    pub id: PackageId,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct PackageId(Uuid);
+
+impl PackageId {
+    pub fn new() -> Self {
+        PackageId(Uuid::new_v4())
+    }
+}
+
+impl ToString for PackageId {
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -28,9 +44,6 @@ pub struct Package {
     pub metadata: PackageMetadata,
     pub data: PackageData,
 }
-
-#[derive(Default, Deserialize, Serialize)]
-pub struct PackageId(String);
 
 #[derive(Deserialize)]
 pub struct SearchQuery {
