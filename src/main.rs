@@ -10,7 +10,7 @@ use axum::{
     Router,
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tower_http::cors::CorsLayer;
+use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,13 +34,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/package/byRegEx", get(get_package_by_regex))
         .route("/reset", delete(reset_registry))
         .layer(
-            CorsLayer::new()
-                .allow_origin(HeaderValue::from_static("https://web.gcp.sammelson.com"))
-                .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("offset")])
-                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]),
+            tower::ServiceBuilder::new()
+                // apply cache header to CORS requests
+                .layer(SetResponseHeaderLayer::if_not_present(
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("public, max-age=604800"),
+                ))
+                .layer(
+                    CorsLayer::new()
+                        .allow_origin(HeaderValue::from_static("https://web.gcp.sammelson.com"))
+                        .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("offset")])
+                        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]),
+                )
+                // apply cache header to other requests
+                .layer(SetResponseHeaderLayer::overriding(
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("no-store"),
+                )),
         );
 
-    // run it with hyper on localhost:3000
     axum::Server::bind(&SocketAddr::new(
         IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
         8080,
