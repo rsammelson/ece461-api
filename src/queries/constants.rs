@@ -9,6 +9,8 @@ pub const METADATA: &'static str = "metadata";
 #[cfg(test)]
 pub const METADATA: &'static str = "metadata-test";
 
+pub const PAGE_LIMIT: u32 = 2;
+
 async fn init_database() -> FirestoreDb {
     FirestoreDb::new("ece-461-dev").await.unwrap()
 }

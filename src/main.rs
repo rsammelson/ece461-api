@@ -5,10 +5,10 @@ mod user;
 use queries::*;
 
 use axum::{
+    http::{header, HeaderName, HeaderValue, Method},
     routing::{delete, get, post, put},
     Router,
 };
-use http::{header, HeaderName, HeaderValue, Method};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower_http::cors::CorsLayer;
 

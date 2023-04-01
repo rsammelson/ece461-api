@@ -2,21 +2,29 @@
 mod tests;
 
 mod constants;
+use constants::{get_database, METADATA, PAGE_LIMIT};
 
 use crate::{package::*, user::*};
-use constants::{get_database, METADATA};
 
 use axum::{
-    extract::{Json, Path},
+    extract::{Json, Path, Query},
+    http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::IntoResponse,
 };
-use http::{header, HeaderMap, HeaderValue, StatusCode};
+use firestore::{FirestoreQueryCursor, FirestoreQueryDirection, FirestoreValue};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MyResponse {
     code: StatusCode,
-    headers: Vec<(header::HeaderName, HeaderValue)>,
+    headers: Vec<(HeaderName, HeaderValue)>,
     body: String,
+}
+
+impl MyResponse {
+    fn push_header(mut self, header: (HeaderName, HeaderValue)) -> Self {
+        self.headers.push(header);
+        self
+    }
 }
 
 impl IntoResponse for MyResponse {
@@ -57,46 +65,60 @@ fn respond(code: StatusCode, data: impl serde::Serialize) -> MyResponse {
     }
 }
 
+#[derive(serde::Deserialize)]
+pub struct Offset {
+    offset: Option<PackageId>,
+}
+
 /// Get the packages from the registry.
 ///
 /// Get any packages fitting the query. Search for packages satisfying the indicated query.
 /// If you want to enumerate all packages, provide an array with a single PackageQuery whose name is "*".
 /// The response is paginated; the response header includes the offset to use in the next query.
 pub async fn search_packages(
+    Query(Offset { offset }): Query<Offset>,
     Json(search): Json<Vec<SearchQuery>>,
 ) -> Result<MyResponse, StatusCode> {
-    // 413: too many packages returned (shouldn't happen? it's paginated)
     let db = get_database().await;
 
-    let result = futures::future::join_all(search.iter().map(|query| async {
-        let query = db
-            .fluent()
-            .select()
-            .from(METADATA)
-            .filter(|q| {
-                q.for_all([
-                    q.field("Name").eq(&query.name),
-                    query
-                        .version
-                        .as_ref()
-                        .and_then(|v| q.field("Version").eq(v)),
-                ])
-            })
-            .obj()
-            .query()
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        Result::<Vec<PackageMetadata>, StatusCode>::Ok(query)
-    }))
-    .await
-    .into_iter()
-    .collect::<Result<Vec<Vec<_>>, _>>()?
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>();
+    let start: Option<FirestoreValue> = offset.map(|id| id.into());
+    let show_all = search.len() == 1 && search[0].name == "*";
+
+    let query = db.fluent().select().from(METADATA);
+    let query = if show_all {
+        query
+    } else {
+        // TODO: figure out how to do version matching? can't just be a simple string comparison,
+        // since they want semver. If we match after the fact, can't necessarily use the
+        // `.limit(PAGE_LIMIT)`, as we might filter out too many.
+        //
+        // Maybe just make another request if version filters out too many?
+        query.filter(|q| {
+            q.field("Name")
+                .is_in(search.iter().map(|s| &s.name).collect::<Vec<_>>())
+        })
+    };
+    let query = match start {
+        Some(start) => query.start_at(FirestoreQueryCursor::AfterValue(vec![start])),
+        None => query,
+    }
+    .order_by([("ID", FirestoreQueryDirection::Descending)])
+    .limit(PAGE_LIMIT);
+
+    let result: Vec<PackageMetadata> = query.obj().query().await.map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // 200: list of packages
-    Ok(ok(result))
+    Ok(if result.len() < PAGE_LIMIT as usize {
+        // this is the last page, don't provide an offset for the next query
+        ok(result)
+    } else {
+        let last_id = result.last().unwrap().id.parse().unwrap();
+        // this isn't the last page
+        ok(result).push_header((HeaderName::from_static("offset"), last_id))
+    })
 }
 
 /// Reset the registry
@@ -158,7 +180,10 @@ pub async fn post_package(
         .limit(1)
         .query()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
         .len();
 
     if prev_versions_count >= 1 {
@@ -172,15 +197,18 @@ pub async fn post_package(
     db.fluent()
         .insert()
         .into(METADATA)
-        .document_id(metadata.id.to_string())
+        .document_id(&metadata.id)
         .object(&metadata)
         .execute()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     log::info!(
-        "Successfully uploaded new package with id {}",
-        metadata.id.to_string()
+        "Successfully uploaded new package with id {:?}",
+        metadata.id
     );
     // 201: return package, with correct ID
     Ok(ok(Package { metadata, data }))
