@@ -14,7 +14,7 @@ fn basic_ok_response() {
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("application/json")
             )],
-            body: "\"abc\"".to_string()
+            body: "abc"
         }
     );
 }
@@ -33,8 +33,6 @@ async fn query_search() {
     } = search_packages(Query(Offset { offset: None }), Json(query))
         .await
         .unwrap();
-
-    let body: Vec<PackageMetadata> = serde_json::from_str(&body).unwrap();
 
     assert_eq!(code, StatusCode::OK);
     assert_eq!(

@@ -14,54 +14,47 @@ use axum::{
 use firestore::{FirestoreQueryCursor, FirestoreQueryDirection, FirestoreValue};
 
 #[derive(Debug, Default, PartialEq, Eq)]
-pub struct MyResponse {
+pub struct MyResponse<T> {
     code: StatusCode,
     headers: Vec<(HeaderName, HeaderValue)>,
-    body: String,
+    body: T,
 }
 
-impl MyResponse {
+impl<T> MyResponse<T> {
     fn push_header(mut self, header: (HeaderName, HeaderValue)) -> Self {
         self.headers.push(header);
         self
     }
 }
 
-impl IntoResponse for MyResponse {
+impl<T> IntoResponse for MyResponse<T>
+where
+    T: serde::Serialize,
+{
     fn into_response(self) -> axum::response::Response {
         let headers = HeaderMap::from_iter(self.headers.into_iter());
-        (self.code, headers, self.body).into_response()
+        (
+            self.code,
+            headers,
+            serde_json::to_string(&self.body).unwrap_or_default(),
+        )
+            .into_response()
     }
-}
-
-impl From<StatusCode> for MyResponse {
-    fn from(value: StatusCode) -> Self {
-        MyResponse {
-            code: value,
-            ..Default::default()
-        }
-    }
-}
-
-/// helper function because can't do
-/// `impl<T> IntoResponse for T where T: Serialize`
-fn serialize(data: impl serde::Serialize) -> String {
-    serde_json::to_string(&data).unwrap()
 }
 
 /// helper function for constructing common use case of returning status ok with json body
-fn ok(data: impl serde::Serialize) -> MyResponse {
-    respond(StatusCode::OK, data)
+fn ok<T: serde::Serialize>(body: T) -> MyResponse<T> {
+    respond(StatusCode::OK, body)
 }
 
-fn respond(code: StatusCode, data: impl serde::Serialize) -> MyResponse {
+fn respond<T: serde::Serialize>(code: StatusCode, body: T) -> MyResponse<T> {
     MyResponse {
         code,
         headers: vec![(
             header::CONTENT_TYPE,
             HeaderValue::from_static("application/json"),
         )],
-        body: serialize(data),
+        body,
     }
 }
 
@@ -78,7 +71,7 @@ pub struct Offset {
 pub async fn search_packages(
     Query(Offset { offset }): Query<Offset>,
     Json(search): Json<Vec<SearchQuery>>,
-) -> Result<MyResponse, StatusCode> {
+) -> Result<MyResponse<Vec<PackageMetadata>>, StatusCode> {
     let db = get_database().await;
 
     let start: Option<FirestoreValue> = offset.map(|id| id.into());
@@ -124,19 +117,19 @@ pub async fn search_packages(
 /// Reset the registry
 ///
 /// Reset the registry to a system default state.
-pub async fn reset_registry() -> MyResponse {
+pub async fn reset_registry() -> impl IntoResponse {
     // 200: reset registry
     // 401: not authorized
-    StatusCode::NOT_IMPLEMENTED.into()
+    StatusCode::NOT_IMPLEMENTED
 }
 
 /// Interact with the package with this ID
 ///
 /// Return this package.
-pub async fn get_package_by_id(Path(_id): Path<PackageId>) -> MyResponse {
+pub async fn get_package_by_id(Path(_id): Path<PackageId>) -> impl IntoResponse {
     // 200: return package
     // 404: does not exist
-    StatusCode::NOT_IMPLEMENTED.into()
+    StatusCode::NOT_IMPLEMENTED
 }
 
 /// Update the content of the package.
@@ -146,22 +139,22 @@ pub async fn get_package_by_id(Path(_id): Path<PackageId>) -> MyResponse {
 pub async fn update_package_by_id(
     Path(_id): Path<PackageId>,
     Json(_info): Json<Package>,
-) -> MyResponse {
+) -> impl IntoResponse {
     // 200: package updated
     // 404: does not exist
-    StatusCode::NOT_IMPLEMENTED.into()
+    StatusCode::NOT_IMPLEMENTED
 }
 
 /// Delete this version of the package.
-pub async fn delete_package_by_id(Path(_id): Path<PackageId>) -> MyResponse {
+pub async fn delete_package_by_id(Path(_id): Path<PackageId>) -> impl IntoResponse {
     // 200: package deleted
     // 404: does not exist
-    StatusCode::NOT_IMPLEMENTED.into()
+    StatusCode::NOT_IMPLEMENTED
 }
 
 pub async fn post_package(
     Json(Package { mut metadata, data }): Json<Package>,
-) -> Result<MyResponse, StatusCode> {
+) -> Result<MyResponse<Package>, StatusCode> {
     // not yet implemeted:
     // 403: auth failed
     // 424: failed due to bad rating
@@ -214,7 +207,7 @@ pub async fn post_package(
     Ok(ok(Package { metadata, data }))
 }
 
-pub async fn get_rating_by_id(Path(_id): Path<PackageId>) -> MyResponse {
+pub async fn get_rating_by_id(Path(_id): Path<PackageId>) -> MyResponse<PackageRating> {
     // 200: return rating iff all rated
     // 404: does not exist
     // 500: package rating error
@@ -222,7 +215,9 @@ pub async fn get_rating_by_id(Path(_id): Path<PackageId>) -> MyResponse {
 }
 
 /// Create an access token.
-pub async fn authenticate(Json(auth): Json<AuthenticationRequest>) -> MyResponse {
+pub async fn authenticate(
+    Json(auth): Json<AuthenticationRequest>,
+) -> MyResponse<AuthenticationToken> {
     // 200: return token
     // 401: invalid user/password
     // 501: not implemented
@@ -230,7 +225,7 @@ pub async fn authenticate(Json(auth): Json<AuthenticationRequest>) -> MyResponse
 }
 
 /// Return the history of this package (all versions).
-pub async fn get_package_by_name(Path(name): Path<String>) -> MyResponse {
+pub async fn get_package_by_name(Path(name): Path<String>) -> MyResponse<Vec<PackageHistoryEntry>> {
     // 200: return package history
     // 404: does not exist
     respond(
@@ -246,16 +241,16 @@ pub async fn get_package_by_name(Path(name): Path<String>) -> MyResponse {
 }
 
 /// Delete all versions of this package.
-pub async fn delete_package_by_name(Path(_name): Path<String>) -> MyResponse {
+pub async fn delete_package_by_name(Path(_name): Path<String>) -> impl IntoResponse {
     // 200: package deleted
     // 404: does not exist
-    StatusCode::NOT_IMPLEMENTED.into()
+    StatusCode::NOT_IMPLEMENTED
 }
 
 /// Get any packages fitting the regular expression.
 ///
 /// Search for a package using regular expression over package names and READMEs.
-pub async fn get_package_by_regex(_regex: String) -> MyResponse {
+pub async fn get_package_by_regex(_regex: String) -> MyResponse<Vec<PackageMetadata>> {
     // 200: return list of packages
     // 404: no packages found
     respond(
