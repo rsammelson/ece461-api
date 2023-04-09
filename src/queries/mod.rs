@@ -72,43 +72,95 @@ pub async fn search_packages(
     Query(Offset { offset }): Query<Offset>,
     Json(search): Json<Vec<SearchQuery>>,
 ) -> Result<MyResponse<Vec<PackageMetadata>>, StatusCode> {
+    // have to have packages to search for
+    if search.len() < 1 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     let db = get_database().await;
 
-    let start: Option<FirestoreValue> = offset.map(|id| id.into());
+    let mut start: Option<FirestoreValue> = offset.map(|id| id.into());
     let show_all = search.len() == 1 && search[0].name == "*";
 
     let query = db.fluent().select().from(METADATA);
+
+    // filter out packages with names that don't match
     let query = if show_all {
         query
     } else {
-        // TODO: figure out how to do version matching? can't just be a simple string comparison,
-        // since they want semver. If we match after the fact, can't necessarily use the
-        // `.limit(PAGE_LIMIT)`, as we might filter out too many.
-        //
-        // Maybe just make another request if version filters out too many?
         query.filter(|q| {
             q.field("Name")
                 .is_in(search.iter().map(|s| &s.name).collect::<Vec<_>>())
         })
-    };
-    let query = match start {
-        Some(start) => query.start_at(FirestoreQueryCursor::AfterValue(vec![start])),
-        None => query,
     }
     .order_by([("ID", FirestoreQueryDirection::Descending)])
-    .limit(PAGE_LIMIT);
+    .limit(PAGE_LIMIT as u32);
 
-    let result: Vec<PackageMetadata> = query.obj().query().await.map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let mut result = Vec::with_capacity(PAGE_LIMIT);
+    // if we don't get enough semver matches the first time around, try again
+    loop {
+        // start at the offset given
+        let query = match start {
+            Some(start) => query
+                .clone()
+                .start_at(FirestoreQueryCursor::AfterValue(vec![start])),
+            None => query.clone(),
+        }
+        .obj();
+
+        // get a set of packages that have names that match
+        let query_result: Vec<PackageMetadata> = query.query().await.map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        // this is the last page of results, will have to break after semver filter regardless
+        // of result length
+        let last = query_result.len() < PAGE_LIMIT;
+
+        // update query start location
+        start = query_result
+            .last()
+            .map(|PackageMetadata { id, .. }| id.into());
+
+        let semver_filter = |item: &PackageMetadata| {
+            let search_version = search
+                .iter()
+                // find the search query that matches this package
+                // should be a small number of queries, so linear search is fine
+                .find(|search| search.name == "*" || search.name == item.name)
+                // has to match something given query definition
+                .unwrap()
+                .version
+                .as_ref();
+            match search_version {
+                // if no version given, match everything
+                None => true,
+                Some(v) => v.matches(&item.version),
+            }
+        };
+
+        let semver_matches = query_result
+            .into_iter()
+            .take(PAGE_LIMIT - result.len())
+            .filter(semver_filter);
+
+        result.extend(semver_matches);
+
+        if last || result.len() >= PAGE_LIMIT {
+            break;
+        }
+    }
 
     // 200: list of packages
-    Ok(if result.len() < PAGE_LIMIT as usize {
+    Ok(if result.len() < PAGE_LIMIT {
         // this is the last page, don't provide an offset for the next query
         ok(result)
     } else {
-        let last_id = result.last().unwrap().id.parse().unwrap();
+        let last_id = result
+            .last()
+            .and_then(|last| last.id.parse().ok())
+            .unwrap_or_else(|| HeaderValue::from_static(""));
         // this isn't the last page
         ok(result).push_header((HeaderName::from_static("offset"), last_id))
     })
@@ -207,11 +259,11 @@ pub async fn post_package(
     Ok(ok(Package { metadata, data }))
 }
 
-pub async fn get_rating_by_id(Path(_id): Path<PackageId>) -> MyResponse<PackageRating> {
+pub async fn get_rating_by_id(Path(_id): Path<PackageId>) -> impl IntoResponse {
     // 200: return rating iff all rated
     // 404: does not exist
     // 500: package rating error
-    respond(StatusCode::NOT_IMPLEMENTED, PackageRating::default())
+    StatusCode::NOT_IMPLEMENTED
 }
 
 /// Create an access token.
@@ -225,19 +277,10 @@ pub async fn authenticate(
 }
 
 /// Return the history of this package (all versions).
-pub async fn get_package_by_name(Path(name): Path<String>) -> MyResponse<Vec<PackageHistoryEntry>> {
+pub async fn get_package_by_name(Path(_name): Path<String>) -> impl IntoResponse {
     // 200: return package history
     // 404: does not exist
-    respond(
-        StatusCode::NOT_IMPLEMENTED,
-        vec![PackageHistoryEntry {
-            metadata: PackageMetadata {
-                name,
-                ..Default::default()
-            },
-            ..Default::default()
-        }],
-    )
+    StatusCode::NOT_IMPLEMENTED
 }
 
 /// Delete all versions of this package.
@@ -250,11 +293,8 @@ pub async fn delete_package_by_name(Path(_name): Path<String>) -> impl IntoRespo
 /// Get any packages fitting the regular expression.
 ///
 /// Search for a package using regular expression over package names and READMEs.
-pub async fn get_package_by_regex(_regex: String) -> MyResponse<Vec<PackageMetadata>> {
+pub async fn get_package_by_regex(_regex: String) -> impl IntoResponse {
     // 200: return list of packages
     // 404: no packages found
-    respond(
-        StatusCode::NOT_IMPLEMENTED,
-        vec![PackageMetadata::default()],
-    )
+    StatusCode::NOT_IMPLEMENTED
 }

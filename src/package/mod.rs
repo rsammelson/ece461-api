@@ -4,16 +4,17 @@ mod tests;
 use crate::user::User;
 
 use chrono::{DateTime, Utc};
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use uuid::Uuid;
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PackageMetadata {
     #[serde(rename = "Name")]
     pub name: String,
     #[serde(rename = "Version")]
-    pub version: String,
+    pub version: Version,
     #[serde(rename = "ID")]
     pub id: PackageId,
 }
@@ -49,12 +50,6 @@ impl Deref for PackageId {
     }
 }
 
-impl Default for PackageId {
-    fn default() -> Self {
-        Uuid::nil().into()
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum PackageData {
     #[serde(rename = "Content")]
@@ -65,13 +60,7 @@ pub enum PackageData {
     JsProgram(String),
 }
 
-impl Default for PackageData {
-    fn default() -> Self {
-        PackageData::Content(Default::default())
-    }
-}
-
-#[derive(Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Package {
     pub metadata: PackageMetadata,
     pub data: PackageData,
@@ -82,10 +71,10 @@ pub struct SearchQuery {
     #[serde(rename = "Name")]
     pub name: String,
     #[serde(rename = "Version")]
-    pub version: Option<String>,
+    pub version: Option<VersionReq>,
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PackageHistoryEntry {
     #[serde(rename = "User")]
     pub user: User,
@@ -98,9 +87,8 @@ pub struct PackageHistoryEntry {
 }
 
 #[cfg_attr(test, derive(strum::EnumIter))]
-#[derive(Default, Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum PackageHistoryAction {
-    #[default]
     #[serde(rename = "CREATE")]
     Create,
     #[serde(rename = "UPDATE")]
@@ -111,7 +99,7 @@ pub enum PackageHistoryAction {
     Rate,
 }
 
-#[derive(Default, Debug, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct PackageRating {
     #[serde(rename = "BusFactor")]
     pub bus_factor: f64,

@@ -15,7 +15,7 @@ use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 // single threaded runtime because expected to be run in a serverless, < 1 cpu environment
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    pretty_env_logger::init();
+    env_logger::init();
 
     let cors_inner = CorsLayer::new()
         .allow_origin(HeaderValue::from_static("https://web.gcp.sammelson.com"))

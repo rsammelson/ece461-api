@@ -1,6 +1,7 @@
 use super::*;
 
 use chrono::{DateTime, NaiveDate, Utc};
+use semver::{Version, VersionReq};
 use uuid::Uuid;
 
 #[test]
@@ -13,7 +14,7 @@ fn des_ser_metadata() {
         deserialized,
         PackageMetadata {
             name: "test_package".to_string(),
-            version: "1.2.3".to_string(),
+            version: Version::parse("1.2.3").unwrap(),
             id: Uuid::nil().into()
         }
     );
@@ -92,7 +93,7 @@ fn data_only_one_field() {
 }
 
 #[test]
-fn des_search() {
+fn des_search_version_single() {
     let data = r#"{"Name":"to_search","Version":"1.0"}"#;
 
     let deserialized: SearchQuery = serde_json::from_str(data).unwrap();
@@ -100,7 +101,21 @@ fn des_search() {
         deserialized,
         SearchQuery {
             name: "to_search".to_string(),
-            version: Some("1.0".to_string())
+            version: Some(VersionReq::parse("1.0").unwrap())
+        }
+    );
+}
+
+#[test]
+fn des_search_version_range() {
+    let data = r#"{"Name":"to_search","Version":">=1.2.3, <1.8.0"}"#;
+
+    let deserialized: SearchQuery = serde_json::from_str(data).unwrap();
+    assert_eq!(
+        deserialized,
+        SearchQuery {
+            name: "to_search".to_string(),
+            version: Some(VersionReq::parse(">=1.2.3,<1.8.0").unwrap())
         }
     );
 }
@@ -136,20 +151,26 @@ fn ser_history_entry() {
         .and_hms_opt(2, 0, 0)
         .unwrap();
 
+    let metadata = PackageMetadata {
+        name: "".to_string(),
+        version: Version::parse("0.0.0").unwrap(),
+        id: uuid::Uuid::nil().into(),
+    };
+
     let data = PackageHistoryEntry {
         user: User {
             name: "jim".to_string(),
             is_admin: false,
         },
         date: DateTime::from_utc(naivedatetime_utc, Utc),
-        metadata: Default::default(),
+        metadata,
         action: PackageHistoryAction::Create,
     };
 
     let serialized = serde_json::to_string(&data).unwrap();
     assert_eq!(
         serialized,
-        r#"{"User":{"Name":"jim","isAdmin":false},"Date":"2000-01-12T02:00:00Z","PackageMetadata":{"Name":"","Version":"","ID":"00000000-0000-0000-0000-000000000000"},"Action":"CREATE"}"#
+        r#"{"User":{"Name":"jim","isAdmin":false},"Date":"2000-01-12T02:00:00Z","PackageMetadata":{"Name":"","Version":"0.0.0","ID":"00000000-0000-0000-0000-000000000000"},"Action":"CREATE"}"#
     )
 }
 
