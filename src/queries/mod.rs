@@ -4,7 +4,7 @@ mod tests;
 mod constants;
 mod filter;
 use constants::{get_database, METADATA, PAGE_LIMIT};
-use semver::{Version, VersionReq};
+use semver::VersionReq;
 
 use crate::{package::*, user::*};
 
@@ -62,7 +62,15 @@ fn respond<T: serde::Serialize>(code: StatusCode, body: T) -> MyResponse<T> {
 
 #[derive(serde::Deserialize)]
 pub struct Offset {
-    offset: Option<(Version, PackageId)>,
+    offset: Option<String>,
+}
+
+impl Offset {
+    fn parse(offset: &str) -> Option<Vec<FirestoreValue>> {
+        offset
+            .split_once(',')
+            .map(|(v, i)| vec![v.into(), i.into()])
+    }
 }
 
 /// Get the packages from the registry.
@@ -88,12 +96,8 @@ pub async fn search_packages(
 
     let db = get_database().await;
 
-    // let start: Option<FirestoreValue> = (offset_version, offset_id).map(|id| id.into());
-    let start: Option<Vec<FirestoreValue>> =
-        offset.map(|(version, id)| vec![version.into(), id.into()]);
+    let start = offset.and_then(|offs| Offset::parse(&offs));
     let show_all = search.name == "*";
-
-    let query = db.fluent().select().from(METADATA);
 
     let requires_eq = search
         .version
@@ -104,15 +108,15 @@ pub async fn search_packages(
                 .find_map(|c| filter::comparator_requires_eq(c).then_some(c.clone()))
         })
         .flatten();
-
     let one_sort = requires_eq.is_some();
-
     let version = match requires_eq {
         Some(requires_eq) => Some(VersionReq {
             comparators: vec![requires_eq],
         }),
         None => search.version,
     };
+
+    let query = db.fluent().select().from(METADATA).limit(PAGE_LIMIT as u32);
 
     // filter out packages with names that don't match
     let query = if show_all {
@@ -135,8 +139,7 @@ pub async fn search_packages(
             ("Version", FirestoreQueryDirection::Ascending),
             ("ID", FirestoreQueryDirection::Ascending),
         ])
-    }
-    .limit(PAGE_LIMIT as u32);
+    };
 
     // start at the offset given
     let query = match start {
@@ -146,11 +149,10 @@ pub async fn search_packages(
             start
         })),
         None => query,
-    }
-    .obj();
+    };
 
     // get a set of packages that have names that match
-    let result: Vec<PackageMetadata> = query.query().await.map_err(|e| {
+    let result: Vec<PackageMetadata> = query.obj().query().await.map_err(|e| {
         log::error!("{}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -162,7 +164,9 @@ pub async fn search_packages(
     } else {
         let last_id = result
             .last()
-            .and_then(|last| last.id.parse().ok())
+            .map(|last| {
+                HeaderValue::from_str(&format!("{},{}", last.version, last.id.as_ref())).unwrap()
+            })
             .unwrap_or_else(|| HeaderValue::from_static(""));
         // this isn't the last page
         ok(result).push_header((HeaderName::from_static("offset"), last_id))
