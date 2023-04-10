@@ -21,6 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allow_origin(HeaderValue::from_static("https://web.gcp.sammelson.com"))
         .allow_origin(tower_http::cors::Any)
         .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("offset")])
+        .expose_headers([HeaderName::from_static("offset")])
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]);
 
     let cors = tower::ServiceBuilder::new()
