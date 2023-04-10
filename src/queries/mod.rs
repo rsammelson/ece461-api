@@ -2,7 +2,9 @@
 mod tests;
 
 mod constants;
+mod filter;
 use constants::{get_database, METADATA, PAGE_LIMIT};
+use semver::{Version, VersionReq};
 
 use crate::{package::*, user::*};
 
@@ -60,7 +62,7 @@ fn respond<T: serde::Serialize>(code: StatusCode, body: T) -> MyResponse<T> {
 
 #[derive(serde::Deserialize)]
 pub struct Offset {
-    offset: Option<PackageId>,
+    offset: Option<(Version, PackageId)>,
 }
 
 /// Get the packages from the registry.
@@ -77,80 +79,81 @@ pub async fn search_packages(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    // don't want to support this
+    if search.len() > 1 {
+        return Err(StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE);
+    }
+
+    let search = search.into_iter().next().unwrap();
+
     let db = get_database().await;
 
-    let mut start: Option<FirestoreValue> = offset.map(|id| id.into());
-    let show_all = search.len() == 1 && search[0].name == "*";
+    // let start: Option<FirestoreValue> = (offset_version, offset_id).map(|id| id.into());
+    let start: Option<Vec<FirestoreValue>> =
+        offset.map(|(version, id)| vec![version.into(), id.into()]);
+    let show_all = search.name == "*";
 
     let query = db.fluent().select().from(METADATA);
 
+    let requires_eq = search
+        .version
+        .as_ref()
+        .map(|v| {
+            v.comparators
+                .iter()
+                .find_map(|c| filter::comparator_requires_eq(c).then_some(c.clone()))
+        })
+        .flatten();
+
+    let one_sort = requires_eq.is_some();
+
+    let version = match requires_eq {
+        Some(requires_eq) => Some(VersionReq {
+            comparators: vec![requires_eq],
+        }),
+        None => search.version,
+    };
+
     // filter out packages with names that don't match
     let query = if show_all {
-        query
+        query.filter(|q| q.for_all(filter::versionreq_to_filter(&q, version.as_ref()?)))
     } else {
         query.filter(|q| {
-            q.field("Name")
-                .is_in(search.iter().map(|s| &s.name).collect::<Vec<_>>())
+            q.for_all([
+                q.field("Name").eq(&search.name),
+                version
+                    .as_ref()
+                    .and_then(|version| filter::versionreq_to_filter(&q, version)),
+            ])
         })
+    };
+
+    let query = if one_sort {
+        query.order_by([("ID", FirestoreQueryDirection::Ascending)])
+    } else {
+        query.order_by([
+            ("Version", FirestoreQueryDirection::Ascending),
+            ("ID", FirestoreQueryDirection::Ascending),
+        ])
     }
-    .order_by([("ID", FirestoreQueryDirection::Descending)])
     .limit(PAGE_LIMIT as u32);
 
-    let mut result = Vec::with_capacity(PAGE_LIMIT);
-    // if we don't get enough semver matches the first time around, try again
-    loop {
-        // start at the offset given
-        let query = match start {
-            Some(start) => query
-                .clone()
-                .start_at(FirestoreQueryCursor::AfterValue(vec![start])),
-            None => query.clone(),
-        }
-        .obj();
-
-        // get a set of packages that have names that match
-        let query_result: Vec<PackageMetadata> = query.query().await.map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-        // this is the last page of results, will have to break after semver filter regardless
-        // of result length
-        let last = query_result.len() < PAGE_LIMIT;
-
-        // update query start location
-        start = query_result
-            .last()
-            .map(|PackageMetadata { id, .. }| id.into());
-
-        let semver_filter = |item: &PackageMetadata| {
-            let search_version = search
-                .iter()
-                // find the search query that matches this package
-                // should be a small number of queries, so linear search is fine
-                .find(|search| search.name == "*" || search.name == item.name)
-                // has to match something given query definition
-                .unwrap()
-                .version
-                .as_ref();
-            match search_version {
-                // if no version given, match everything
-                None => true,
-                Some(v) => v.matches(&item.version),
-            }
-        };
-
-        let semver_matches = query_result
-            .into_iter()
-            .take(PAGE_LIMIT - result.len())
-            .filter(semver_filter);
-
-        result.extend(semver_matches);
-
-        if last || result.len() >= PAGE_LIMIT {
-            break;
-        }
+    // start at the offset given
+    let query = match start {
+        Some(start) => query.start_at(FirestoreQueryCursor::AfterValue(if one_sort {
+            start.into_iter().skip(1).collect()
+        } else {
+            start
+        })),
+        None => query,
     }
+    .obj();
+
+    // get a set of packages that have names that match
+    let result: Vec<PackageMetadata> = query.query().await.map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // 200: list of packages
     Ok(if result.len() < PAGE_LIMIT {
