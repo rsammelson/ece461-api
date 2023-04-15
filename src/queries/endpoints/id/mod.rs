@@ -1,7 +1,13 @@
 use firestore::FirestoreDb;
 
-use super::*;
-use crate::{database, package::*};
+use super::{ok, types::*, MyResponse};
+use crate::database;
+
+use axum::{
+    extract::{Json, Path},
+    http::StatusCode,
+    response::IntoResponse,
+};
 
 async fn find_package_by_id<F, T>(
     db: FirestoreDb,
@@ -57,7 +63,7 @@ pub async fn get_package_by_id(
 /// The package contents (from PackageData) will replace the previous contents.
 pub async fn update_package_by_id(
     Path(id): Path<PackageId>,
-    Json(Package { metadata, data }): Json<Package>,
+    Json(Package { metadata, data: _ }): Json<Package>,
 ) -> Result<(), StatusCode> {
     if id != metadata.id {
         // ???

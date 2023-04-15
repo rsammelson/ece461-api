@@ -1,4 +1,5 @@
 use super::*;
+use crate::user::User;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use semver::Version;

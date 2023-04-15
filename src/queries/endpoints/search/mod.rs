@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-use super::{filter, ok, MyResponse};
-use crate::{database, package::*};
+use super::{filter, ok, types::*, MyResponse};
+use crate::database;
 
 use axum::{
     extract::{Json, Query},

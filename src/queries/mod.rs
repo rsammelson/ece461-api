@@ -3,6 +3,7 @@ mod tests;
 
 mod endpoints;
 mod filter;
+pub mod types;
 
 pub use endpoints::*;
 

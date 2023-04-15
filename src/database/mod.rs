@@ -1,4 +1,4 @@
-use crate::package::*;
+use crate::queries::types::{PackageMetadata, PackageRating};
 
 use firestore::FirestoreDb;
 use serde::{Deserialize, Serialize};
