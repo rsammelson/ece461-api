@@ -24,12 +24,6 @@ pub struct PackageMetadata {
 
 pub const PACKAGE_METADATA_FIELDS: [&str; 3] = [database::NAME, database::VERSION, database::ID];
 
-impl From<DatabaseEntry> for PackageMetadata {
-    fn from(DatabaseEntry { metadata, .. }: DatabaseEntry) -> Self {
-        metadata
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageId(String);
 
@@ -91,15 +85,6 @@ pub const PACKAGE_FIELDS: [&str; 4] = [
     database::URL,
 ];
 
-impl From<DatabaseEntry> for Package {
-    fn from(DatabaseEntry { metadata, url, .. }: DatabaseEntry) -> Self {
-        Package {
-            metadata,
-            data: PackageData::Url(url),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PackageHistoryEntry {
     #[serde(rename = "User")]
@@ -149,9 +134,3 @@ pub const RATING_FIELDS: [&str; 6] = [
     database::LICENSE_SCORE,
     database::GOOD_PINNING_PRACTICE,
 ];
-
-impl From<DatabaseEntry> for PackageRating {
-    fn from(DatabaseEntry { rating, .. }: DatabaseEntry) -> Self {
-        rating
-    }
-}

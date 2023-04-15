@@ -47,7 +47,20 @@ pub async fn search_packages(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // don't want to support this
+    // hard to support this because of the firestore filtering / sorting rules
+    //
+    // ex:
+    // search 1 is "name == abc, version == 123"
+    // search 2 is "name == def, version >= 234"
+    //
+    // because of search 1, we *can not* tell firestore to sort by version
+    // because of search 2, we *must* tell firestore to sort by version
+    //
+    // Possible solution is to make the requests one at a time, requesting again if the result
+    // from the previous request didn't fill an entire page.
+    //
+    // Another possible solution is telling the client to do that themselves.
+    // (the client knows when it's hit the last page because the offset header field isn't set)
     if search.len() > 1 {
         return Err(StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE);
     }
@@ -60,6 +73,13 @@ pub async fn search_packages(
     let start = offset.and_then(|offs| Offset::parse(&offs));
     let show_all = search.name == "*";
 
+    // if filtering with something like `version == "123"` directly, firestore can't sort by
+    // version. However, we want to sort by version in other cases. This nonsense just detects if
+    // the semver search is a direct equality, and pulls it out if so.
+    //
+    // Have to pull out just the one because if you filter by "inequality" (everything except
+    // equality), firestore requires that you sort by that field first -- which we're not allowed
+    // to do if also filtering that field by equality
     let requires_eq = search
         .version
         .as_ref()
@@ -85,18 +105,16 @@ pub async fn search_packages(
         .limit(database::PAGE_LIMIT as u32);
 
     // filter out packages with names that don't match
-    let query = if show_all {
-        query.filter(|q| q.for_all(filter::versionreq_to_filter(&q, version.as_ref()?)))
-    } else {
-        query.filter(|q| {
-            q.for_all([
-                q.field(database::NAME).eq(&search.name),
-                version
-                    .as_ref()
-                    .and_then(|version| filter::versionreq_to_filter(&q, version)),
-            ])
-        })
-    };
+    let query = query.filter(|q| {
+        q.for_all([
+            (!show_all)
+                .then(|| q.field(database::NAME).eq(&search.name))
+                .flatten(),
+            version
+                .as_ref()
+                .and_then(|version| filter::versionreq_to_filter(&q, version)),
+        ])
+    });
 
     // because of firebase, can't sort by version if we require an eq comparator on version
     let query = if one_sort {
@@ -134,7 +152,6 @@ pub async fn search_packages(
                 HeaderValue::from_str(&format!("{},{}", last.version, last.id.as_ref())).unwrap()
             })
             .unwrap_or_else(|| HeaderValue::from_static(""));
-        // this isn't the last page
         ok(result).push_header((HeaderName::from_static("offset"), last_id))
     })
 }
