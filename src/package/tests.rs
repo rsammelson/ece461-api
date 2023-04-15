@@ -1,7 +1,7 @@
 use super::*;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use semver::{Version, VersionReq};
+use semver::Version;
 use uuid::Uuid;
 
 #[test]
@@ -89,58 +89,6 @@ fn data_only_one_field() {
     let deserialized: Result<PackageData, _> = serde_json::from_str(data);
     if let Ok(_) = deserialized {
         panic!("Expected to only be able to set one of the fields of `data`");
-    }
-}
-
-#[test]
-fn des_search_version_single() {
-    let data = r#"{"Name":"to_search","Version":"1.0"}"#;
-
-    let deserialized: SearchQuery = serde_json::from_str(data).unwrap();
-    assert_eq!(
-        deserialized,
-        SearchQuery {
-            name: "to_search".to_string(),
-            version: Some(VersionReq::parse("1.0").unwrap())
-        }
-    );
-}
-
-#[test]
-fn des_search_version_range() {
-    let data = r#"{"Name":"to_search","Version":">=1.2.3, <1.8.0"}"#;
-
-    let deserialized: SearchQuery = serde_json::from_str(data).unwrap();
-    assert_eq!(
-        deserialized,
-        SearchQuery {
-            name: "to_search".to_string(),
-            version: Some(VersionReq::parse(">=1.2.3,<1.8.0").unwrap())
-        }
-    );
-}
-
-#[test]
-fn des_search_no_version() {
-    let data = r#"{"Name":"to_search"}"#;
-
-    let deserialized: SearchQuery = serde_json::from_str(data).unwrap();
-    assert_eq!(
-        deserialized,
-        SearchQuery {
-            name: "to_search".to_string(),
-            version: None,
-        }
-    );
-}
-
-#[test]
-fn des_search_name_required() {
-    let data = r#"{"Version":"0.0.0"}"#;
-
-    let deserialized: Result<SearchQuery, _> = serde_json::from_str(data);
-    if let Ok(_) = deserialized {
-        panic!("Expected \"Name\" to be required for a `SearchQuery`");
     }
 }
 

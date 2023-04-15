@@ -1,3 +1,4 @@
+mod database;
 mod package;
 mod queries;
 mod user;

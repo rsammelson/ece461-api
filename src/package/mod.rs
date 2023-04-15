@@ -1,10 +1,13 @@
 #[cfg(test)]
 mod tests;
 
-use crate::user::User;
+use crate::{
+    database::{self, DatabaseEntry},
+    user::User,
+};
 
 use chrono::{DateTime, Utc};
-use semver::{Version, VersionReq};
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use uuid::Uuid;
@@ -17,6 +20,14 @@ pub struct PackageMetadata {
     pub version: Version,
     #[serde(rename = "ID")]
     pub id: PackageId,
+}
+
+pub const PACKAGE_METADATA_FIELDS: [&str; 3] = [database::NAME, database::VERSION, database::ID];
+
+impl From<DatabaseEntry> for PackageMetadata {
+    fn from(DatabaseEntry { metadata, .. }: DatabaseEntry) -> Self {
+        metadata
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,12 +77,27 @@ pub struct Package {
     pub data: PackageData,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize)]
-pub struct SearchQuery {
-    #[serde(rename = "Name")]
-    pub name: String,
-    #[serde(rename = "Version")]
-    pub version: Option<VersionReq>,
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct PackageWithUrl {
+    pub metadata: PackageMetadata,
+    #[serde(rename = "URL")]
+    pub url: String,
+}
+
+pub const PACKAGE_FIELDS: [&str; 4] = [
+    database::NAME,
+    database::VERSION,
+    database::ID,
+    database::URL,
+];
+
+impl From<DatabaseEntry> for Package {
+    fn from(DatabaseEntry { metadata, url, .. }: DatabaseEntry) -> Self {
+        Package {
+            metadata,
+            data: PackageData::Url(url),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -99,7 +125,7 @@ pub enum PackageHistoryAction {
     Rate,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PackageRating {
     #[serde(rename = "BusFactor")]
     pub bus_factor: f64,
@@ -113,4 +139,19 @@ pub struct PackageRating {
     pub license_score: f64,
     #[serde(rename = "GoodPinningPractice")]
     pub good_pinning_practice: f64,
+}
+
+pub const RATING_FIELDS: [&str; 6] = [
+    database::BUS_FACTOR,
+    database::CORRECTNESS,
+    database::RAMP_UP,
+    database::RESPONSIVE_MAINTAINER,
+    database::LICENSE_SCORE,
+    database::GOOD_PINNING_PRACTICE,
+];
+
+impl From<DatabaseEntry> for PackageRating {
+    fn from(DatabaseEntry { rating, .. }: DatabaseEntry) -> Self {
+        rating
+    }
 }

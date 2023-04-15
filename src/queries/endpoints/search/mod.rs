@@ -1,5 +1,8 @@
-use super::{constants, filter, ok, MyResponse};
-use crate::package::*;
+#[cfg(test)]
+mod tests;
+
+use super::{filter, ok, MyResponse};
+use crate::{database, package::*};
 
 use axum::{
     extract::{Json, Query},
@@ -7,8 +10,17 @@ use axum::{
 };
 use firestore::{FirestoreQueryCursor, FirestoreQueryDirection, FirestoreValue};
 use semver::VersionReq;
+use serde::Deserialize;
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+pub struct SearchQuery {
+    #[serde(rename = "Name")]
+    pub name: String,
+    #[serde(rename = "Version")]
+    pub version: Option<VersionReq>,
+}
+
+#[derive(Deserialize)]
 pub struct Offset {
     offset: Option<String>,
 }
@@ -43,7 +55,7 @@ pub async fn search_packages(
     // know at least one element from early return above
     let search = search.into_iter().next().unwrap();
 
-    let db = constants::get_database().await;
+    let db = database::get_database().await;
 
     let start = offset.and_then(|offs| Offset::parse(&offs));
     let show_all = search.name == "*";
@@ -68,8 +80,9 @@ pub async fn search_packages(
     let query = db
         .fluent()
         .select()
-        .from(constants::METADATA)
-        .limit(constants::PAGE_LIMIT as u32);
+        .fields(PACKAGE_METADATA_FIELDS)
+        .from(database::METADATA)
+        .limit(database::PAGE_LIMIT as u32);
 
     // filter out packages with names that don't match
     let query = if show_all {
@@ -77,7 +90,7 @@ pub async fn search_packages(
     } else {
         query.filter(|q| {
             q.for_all([
-                q.field("Name").eq(&search.name),
+                q.field(database::NAME).eq(&search.name),
                 version
                     .as_ref()
                     .and_then(|version| filter::versionreq_to_filter(&q, version)),
@@ -87,11 +100,11 @@ pub async fn search_packages(
 
     // because of firebase, can't sort by version if we require an eq comparator on version
     let query = if one_sort {
-        query.order_by([("ID", FirestoreQueryDirection::Ascending)])
+        query.order_by([(database::ID, FirestoreQueryDirection::Ascending)])
     } else {
         query.order_by([
-            ("Version", FirestoreQueryDirection::Ascending),
-            ("ID", FirestoreQueryDirection::Ascending),
+            (database::VERSION, FirestoreQueryDirection::Ascending),
+            (database::ID, FirestoreQueryDirection::Ascending),
         ])
     };
 
@@ -105,14 +118,13 @@ pub async fn search_packages(
         None => query,
     };
 
-    // get a set of packages that have names that match
-    let result: Vec<PackageMetadata> = query.obj().query().await.map_err(|e| {
+    let result = query.obj().query().await.map_err(|e| {
         log::error!("{}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
     // 200: list of packages
-    Ok(if result.len() < constants::PAGE_LIMIT {
+    Ok(if result.len() < database::PAGE_LIMIT {
         // this is the last page, don't provide an offset for the next query
         ok(result)
     } else {
