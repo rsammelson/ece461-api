@@ -3,7 +3,7 @@ use firestore::FirestoreDb;
 use super::{ok, types::*, MyResponse};
 use crate::{
     database::{self, DatabaseEntry},
-    scoring::{self, RatingError},
+    scoring::{self, RatedPackage, RatingError},
 };
 
 use axum::{
@@ -98,9 +98,13 @@ pub async fn post_package(
     // 403: auth failed
     // 424: failed due to bad rating
 
-    // TODO: download / decode the uploaded package
-    // TODO: score
-    let (rating, id, content) = scoring::rate_package(data).await.map_err(|e| {
+    let RatedPackage {
+        name,
+        version,
+        id,
+        rating,
+        content,
+    } = scoring::rate_package(data).await.map_err(|e| {
         log::error!("{}", e);
         use RatingError::*;
         match e {
@@ -118,9 +122,6 @@ pub async fn post_package(
     let url = "".into();
 
     let db = database::get_database().await;
-
-    let name = "".into();
-    let version = semver::Version::parse("1.0.0").unwrap();
 
     let metadata = PackageMetadata { name, version, id };
 

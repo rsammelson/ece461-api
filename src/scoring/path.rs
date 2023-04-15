@@ -15,10 +15,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(super) async fn rating_from_path<P: AsRef<Path>>(path: P) -> RatingResult<PackageRating> {
-    Ok(get_scoring_data_from_path(path).await?.into())
-}
-
 #[derive(Debug, Deserialize)]
 struct Repository {
     url: String,
@@ -77,22 +73,33 @@ impl TryFrom<PackageJson> for PackageJsonVerified {
     }
 }
 
-async fn get_scoring_data_from_path<P: AsRef<Path>>(path: P) -> RatingResult<ScoringData> {
-    let readme_exists = find_file(&path, "readme")?.is_some();
+pub(super) async fn rating_from_path<P: AsRef<Path>>(
+    path: P,
+) -> RatingResult<(String, Version, PackageRating)> {
+    let readme_exists = find_file(&path, |name| name.to_lowercase().contains("readme"))?.is_some();
 
-    let package_json: PackageJsonVerified =
+    let PackageJsonVerified { name, version, url } =
         serde_json::from_reader::<_, PackageJson>(io::BufReader::new(fs::File::open(
-            find_file(&path, "package.json")?.ok_or_else(|| MissingPackageJson)?,
+            find_file(&path, |name| name == "package.json")?.ok_or_else(|| MissingPackageJson)?,
         )?))?
         .try_into()?;
 
-    Ok(ScoringData {
+    let data = ScoringData {
         readme_exists,
-        ..github::graphql::query(package_json.url).await?
-    })
+        ..github::graphql::query(url).await?
+    };
+
+    let scores = data.into();
+
+    Ok((name, version, scores))
 }
 
-fn find_file<P: AsRef<Path>>(haystack: P, needle: &str) -> Result<Option<PathBuf>, io::Error> {
+/// Breadth first traversal of the filesystem starting at the haystack, searching for a file whose
+/// name satisfies the given closure
+fn find_file<P: AsRef<Path>, F: Fn(String) -> bool>(
+    haystack: P,
+    needle: F,
+) -> Result<Option<PathBuf>, io::Error> {
     let mut barn = VecDeque::from([haystack.as_ref().to_path_buf()]);
     while let Some(haystack) = barn.pop_front() {
         for entry in fs::read_dir(haystack)? {
@@ -103,10 +110,10 @@ fn find_file<P: AsRef<Path>>(haystack: P, needle: &str) -> Result<Option<PathBuf
                 barn.push_back(path);
             } else {
                 let name = match entry.file_name().into_string() {
-                    Ok(s) => s.to_lowercase(),
+                    Ok(s) => s,
                     Err(_) => continue,
                 };
-                if name.contains(needle) {
+                if needle(name) {
                     return Ok(Some(path));
                 }
             }

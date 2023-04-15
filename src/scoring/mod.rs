@@ -5,6 +5,7 @@ mod url;
 use crate::queries::types::{PackageData, PackageId, PackageRating};
 
 use base64::{engine::general_purpose, read::DecoderReader};
+use semver::Version;
 use std::io::{self, Read};
 use zip::ZipArchive;
 
@@ -20,36 +21,38 @@ pub enum RatingError {
     UrlParseError(String),
     #[error("{0}")]
     GraphQlError(#[from] github::GraphQlError),
-    #[error("zip error: `{0}`")]
+    #[error("{0}")]
     ZipError(#[from] zip::result::ZipError),
-    #[error("io error: `{0}`")]
+    #[error("{0}")]
     IoError(#[from] io::Error),
     #[error("base64 error: `{0}`")]
     Base64Error(io::Error),
-    #[error("deserialize error: `{0}`")]
+    #[error("{0}")]
     DeserializeError(#[from] serde_json::Error),
 }
 use RatingError::*;
 
 type RatingResult<T> = Result<T, RatingError>;
 
-pub async fn rate_package(
-    package: PackageData,
-) -> RatingResult<(PackageRating, PackageId, Vec<u8>)> {
+pub struct RatedPackage {
+    pub name: String,
+    pub version: Version,
+    pub id: PackageId,
+    pub rating: PackageRating,
+    pub content: Vec<u8>,
+}
+
+pub async fn rate_package(package: PackageData) -> RatingResult<RatedPackage> {
     match package {
-        PackageData::Content(base64) => Ok({
-            let base64 = base64.into_bytes();
-            let (rating, id) = from_content(&base64).await?;
-            (rating, id, base64)
-        }),
+        PackageData::Content(content) => Ok(from_content(content.into_bytes()).await?),
         PackageData::Url(url) => from_url(&url).await,
         _ => Err(CouldNotRate),
     }
 }
 
-async fn from_content(content: &[u8]) -> RatingResult<(PackageRating, PackageId)> {
+async fn from_content(content: Vec<u8>) -> RatingResult<RatedPackage> {
     let mut buf = Vec::new();
-    DecoderReader::new(content, &general_purpose::STANDARD)
+    DecoderReader::new(content.as_slice(), &general_purpose::STANDARD)
         .read_to_end(&mut buf)
         .map_err(|e| Base64Error(e))?;
     let buf = io::Cursor::new(buf);
@@ -59,20 +62,25 @@ async fn from_content(content: &[u8]) -> RatingResult<(PackageRating, PackageId)
 
     ZipArchive::new(buf)?.extract(&path)?;
 
-    let rating = path::rating_from_path(&path).await?;
+    let (name, version, rating) = path::rating_from_path(&path).await?;
 
     // can still score if the files weren't removed
     let _ = std::fs::remove_dir_all(&path)
         .map_err(|e| log::error!("Error removing files after scoring: `{}`", e));
 
-    Ok((rating, id))
+    Ok(RatedPackage {
+        name,
+        version,
+        id,
+        rating,
+        content,
+    })
 }
 
-async fn from_url(_url: &str) -> RatingResult<(PackageRating, PackageId, Vec<u8>)> {
+async fn from_url(_url: &str) -> RatingResult<RatedPackage> {
     todo!()
 }
 
-#[derive(Debug)]
 struct ScoringData {
     readme_exists: bool,
     documentation_exists: bool,
