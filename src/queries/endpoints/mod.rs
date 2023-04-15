@@ -1,13 +1,10 @@
-// #[cfg(test)]
-// mod tests;
-
 mod id;
 mod search;
 pub use id::*;
 pub use search::*;
 
 use super::*;
-use crate::user::*;
+use crate::user::AuthenticationRequest;
 
 use axum::{
     extract::{Json, Path},
@@ -18,6 +15,7 @@ use axum::{
 /// Reset the registry
 ///
 /// Reset the registry to a system default state.
+// TODO: have to have this for baseline requirements
 pub async fn reset_registry() -> impl IntoResponse {
     // 200: reset registry
     // 401: not authorized
@@ -26,13 +24,11 @@ pub async fn reset_registry() -> impl IntoResponse {
 
 /// Create an access token.
 // not in baseline requirements
-pub async fn authenticate(
-    Json(auth): Json<AuthenticationRequest>,
-) -> MyResponse<AuthenticationToken> {
+pub async fn authenticate(Json(_auth): Json<AuthenticationRequest>) -> impl IntoResponse {
     // 200: return token
     // 401: invalid user/password
     // 501: not implemented
-    respond(StatusCode::NOT_IMPLEMENTED, AuthenticationToken::new(auth))
+    StatusCode::NOT_IMPLEMENTED
 }
 
 /// Return the history of this package (all versions).

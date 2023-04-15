@@ -68,6 +68,15 @@ pub struct Package {
     pub data: PackageData,
 }
 
+impl From<database::DatabaseEntry> for Package {
+    fn from(database::DatabaseEntry { metadata, url, .. }: database::DatabaseEntry) -> Self {
+        Package {
+            metadata,
+            data: PackageData::Url(url),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PackageWithUrl {
     pub metadata: PackageMetadata,

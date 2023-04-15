@@ -1,7 +1,10 @@
 use firestore::FirestoreDb;
 
 use super::{ok, types::*, MyResponse};
-use crate::database;
+use crate::{
+    database::{self, DatabaseEntry},
+    scoring::{self, RatingError},
+};
 
 use axum::{
     extract::{Json, Path},
@@ -65,8 +68,8 @@ pub async fn update_package_by_id(
     Path(id): Path<PackageId>,
     Json(Package { metadata, data: _ }): Json<Package>,
 ) -> Result<(), StatusCode> {
-    if id != metadata.id {
-        // ???
+    // if they put an id in the metadata, it should match the one they put in the path
+    if metadata.id.as_ref() != "" && id != metadata.id {
         return Err(StatusCode::NOT_FOUND);
     }
 
@@ -89,45 +92,49 @@ pub async fn update_package_by_id(
 // TODO: this was updated to only include the data field
 // needs to be pretty much entirely rewritten
 pub async fn post_package(
-    Json(Package { mut metadata, data }): Json<Package>,
+    Json(data): Json<PackageData>,
 ) -> Result<MyResponse<Package>, StatusCode> {
     // not yet implemeted:
     // 403: auth failed
     // 424: failed due to bad rating
+
+    // TODO: download / decode the uploaded package
+    // TODO: score
+    let (rating, id, content) = scoring::rate_package(data).await.map_err(|e| {
+        log::error!("{}", e);
+        use RatingError::*;
+        match e {
+            MissingPackageJson | MissingRepository | UrlParseError(_) | CouldNotRate => {
+                StatusCode::BAD_REQUEST
+            }
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    })?;
+
+    log::error!("{:?}", rating);
+    return Err(StatusCode::IM_A_TEAPOT);
+
+    // TODO: upload to obj storage
+    let url = "".into();
+
     let db = database::get_database().await;
 
-    let prev_versions_count = db
-        .fluent()
-        .select()
-        .from(database::METADATA)
-        .filter(|q| {
-            q.for_all([
-                q.field("Name").eq(&metadata.name),
-                q.field("Version").eq(&metadata.version),
-            ])
-        })
-        .limit(1)
-        .query()
-        .await
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .len();
+    let name = "".into();
+    let version = semver::Version::parse("1.0.0").unwrap();
 
-    if prev_versions_count >= 1 {
-        // 409: package already exists
-        log::info!("Failing package upload due to at least one matching package");
-        return Err(StatusCode::CONFLICT);
-    }
+    let metadata = PackageMetadata { name, version, id };
 
-    metadata.id = PackageId::new();
+    let entry = DatabaseEntry {
+        metadata,
+        url,
+        rating,
+    };
 
     db.fluent()
         .insert()
         .into(database::METADATA)
-        .document_id(&metadata.id)
-        .object(&metadata)
+        .document_id(&entry.metadata.id)
+        .object(&entry)
         .execute()
         .await
         .map_err(|e| {
@@ -135,12 +142,8 @@ pub async fn post_package(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    log::info!(
-        "Successfully uploaded new package with id {:?}",
-        metadata.id
-    );
-    // 201: return package, with correct ID
-    Ok(ok(Package { metadata, data }))
+    // 201: return package
+    Ok(ok(entry.into()))
 }
 
 pub async fn get_rating_by_id(

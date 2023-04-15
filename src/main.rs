@@ -1,6 +1,7 @@
 mod database;
 mod package;
 mod queries;
+mod scoring;
 mod user;
 
 use queries::*;

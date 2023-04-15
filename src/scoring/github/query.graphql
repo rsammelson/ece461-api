@@ -1,0 +1,32 @@
+query GithubQuery($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    issuesOpen: issues(states: OPEN) {
+      totalCount
+    }
+    issuesClosed: issues(states: CLOSED) {
+      totalCount
+    }
+    issueLastOpened: issues(
+      states: OPEN
+      orderBy: { field: CREATED_AT, direction: DESC }
+      first: 1
+    ) {
+      nodes {
+        createdAt
+      }
+    }
+    assignableUsers {
+      totalCount
+    }
+    object(expression: "master:README.md") {
+      __typename
+      ... on Blob {
+        text
+      }
+    }
+    licenseInfo {
+      key
+    }
+    hasWikiEnabled
+  }
+}

@@ -11,6 +11,7 @@ use axum::{
     http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::IntoResponse,
 };
+use serde::Serialize;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MyResponse<T> {
@@ -28,7 +29,7 @@ impl<T> MyResponse<T> {
 
 impl<T> IntoResponse for MyResponse<T>
 where
-    T: serde::Serialize,
+    T: Serialize,
 {
     fn into_response(self) -> axum::response::Response {
         let headers = HeaderMap::from_iter(self.headers.into_iter());
@@ -42,11 +43,11 @@ where
 }
 
 /// helper function for constructing common use case of returning status ok with json body
-fn ok<T: serde::Serialize>(body: T) -> MyResponse<T> {
+fn ok<T: Serialize>(body: T) -> MyResponse<T> {
     respond(StatusCode::OK, body)
 }
 
-fn respond<T: serde::Serialize>(code: StatusCode, body: T) -> MyResponse<T> {
+fn respond<T: Serialize>(code: StatusCode, body: T) -> MyResponse<T> {
     MyResponse {
         code,
         headers: vec![(

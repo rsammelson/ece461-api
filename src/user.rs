@@ -23,13 +23,3 @@ pub struct Secret {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthenticationToken(String);
-
-impl AuthenticationToken {
-    pub fn new(auth: AuthenticationRequest) -> Self {
-        AuthenticationToken({
-            let mut ret = auth.user.name;
-            ret.push_str(&auth.secret.password);
-            ret
-        })
-    }
-}
