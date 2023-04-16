@@ -4,9 +4,9 @@ use firestore::FirestoreDb;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(test))]
-pub const METADATA: &'static str = "metadata";
+pub const METADATA: &str = "metadata";
 #[cfg(test)]
-pub const METADATA: &'static str = "metadata-test";
+pub const METADATA: &str = "metadata-test";
 
 #[cfg(not(test))]
 pub const PAGE_LIMIT: usize = 10;

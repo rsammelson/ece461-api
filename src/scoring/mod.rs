@@ -60,7 +60,7 @@ async fn from_content(content: Vec<u8>) -> RatingResult<RatedPackage> {
     let mut buf = Vec::new();
     DecoderReader::new(content.as_slice(), &general_purpose::STANDARD)
         .read_to_end(&mut buf)
-        .map_err(|e| Base64Error(e))?;
+        .map_err(Base64Error)?;
     let buf = io::Cursor::new(buf);
 
     let id = PackageId::new();
@@ -86,8 +86,8 @@ async fn from_content_internal(
     buf: io::Cursor<Vec<u8>>,
     path: &str,
 ) -> RatingResult<(String, Version, PackageRating)> {
-    ZipArchive::new(buf)?.extract(&path)?;
-    Ok(path::rating_from_path(&path).await?)
+    ZipArchive::new(buf)?.extract(path)?;
+    path::rating_from_path(path).await
 }
 
 async fn from_url(url: &str) -> RatingResult<RatedPackage> {
@@ -121,7 +121,7 @@ async fn from_url_internal(url: &str, path: &str, id: PackageId) -> RatingResult
 
             ZipArchive::new(io::Cursor::new(&content[..]))
                 .unwrap()
-                .extract(&path)
+                .extract(path)
                 .unwrap();
             content.into()
         }
@@ -145,10 +145,10 @@ async fn from_url_internal(url: &str, path: &str, id: PackageId) -> RatingResult
                 .ok_or_else(|| CouldNotGetLatestVersion)?;
 
             let tar_gz = client.get(tarball).send().await?.bytes().await?;
-            tar::Archive::new(gzip::Decoder::new(&tar_gz[..])?).unpack(&path)?;
+            tar::Archive::new(gzip::Decoder::new(&tar_gz[..])?).unpack(path)?;
 
             let mut content = Vec::new();
-            path::zip_dir(&path, io::Cursor::new(&mut content))?;
+            path::zip_dir(path, io::Cursor::new(&mut content))?;
             content
         }
     };

@@ -247,7 +247,8 @@ fn comparator_to_filter(
                 minor: Some(0),
                 patch: Some(patch),
                 ..
-            } => q.for_all([q.field("Version").eq(format!("0.0.{patch}"))]), Comparator {
+            } => q.for_all([q.field("Version").eq(format!("0.0.{patch}"))]),
+            Comparator {
                 major,
                 minor: Some(minor),
                 patch: None,
@@ -311,20 +312,19 @@ fn comparator_to_filter(
 
 pub fn comparator_requires_eq(comp: &Comparator) -> bool {
     use semver::Op::*;
-    match comp {
+    matches!(
+        comp,
         Comparator {
             op: Exact,
             minor: Some(_),
             patch: Some(_),
             ..
-        } => true,
-        Comparator {
+        } | Comparator {
             op: Caret,
             major: 0,
             minor: Some(0),
             patch: Some(_),
             ..
-        } => true,
-        _ => false,
-    }
+        }
+    )
 }

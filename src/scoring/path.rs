@@ -25,12 +25,12 @@ struct Repository {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum PackageJson {
-    DeepRepo {
+    Deep {
         name: String,
         version: Version,
         repository: Repository,
     },
-    FlatRepo {
+    Flat {
         name: String,
         version: Version,
         repository: String,
@@ -51,7 +51,7 @@ impl TryFrom<PackageJson> for PackageJsonVerified {
     fn try_from(value: PackageJson) -> Result<Self, Self::Error> {
         match value {
             PackageJson::NoRepo { .. } => Err(MissingRepository),
-            PackageJson::FlatRepo {
+            PackageJson::Flat {
                 name,
                 version,
                 repository,
@@ -60,7 +60,7 @@ impl TryFrom<PackageJson> for PackageJsonVerified {
                 version,
                 url: canonicalize_repo(&repository)?,
             }),
-            PackageJson::DeepRepo {
+            PackageJson::Deep {
                 name,
                 version,
                 repository: Repository { url },

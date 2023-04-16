@@ -43,7 +43,7 @@ where
 {
     type Error = ();
     fn try_from(value: graphql_client::Response<T>) -> Result<Self, Self::Error> {
-        value.data.ok_or_else(|| ())?.try_into()
+        value.data.ok_or(())?.try_into()
     }
 }
 
@@ -58,7 +58,7 @@ impl TryFrom<github_query::ResponseData> for ScoringData {
             object,
             license_info,
             has_wiki_enabled,
-        } = value.repository.ok_or_else(|| ())?;
+        } = value.repository.ok_or(())?;
 
         let readme_exists = object.is_some();
         let documentation_exists = has_wiki_enabled;
@@ -145,5 +145,5 @@ fn license_good(license: String) -> bool {
         "zpl-2.0",
         "zpl-2.1",
     ];
-    GOOD_LICENSES.iter().find(|l| **l == license).is_some()
+    GOOD_LICENSES.iter().any(|l| *l == license)
 }

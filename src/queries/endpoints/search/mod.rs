@@ -43,7 +43,7 @@ pub async fn search_packages(
     Json(search): Json<Vec<SearchQuery>>,
 ) -> Result<MyResponse<Vec<PackageMetadata>>, StatusCode> {
     // have to have packages to search for
-    if search.len() < 1 {
+    if search.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -80,15 +80,11 @@ pub async fn search_packages(
     // Have to pull out just the one because if you filter by "inequality" (everything except
     // equality), firestore requires that you sort by that field first -- which we're not allowed
     // to do if also filtering that field by equality
-    let requires_eq = search
-        .version
-        .as_ref()
-        .map(|v| {
-            v.comparators
-                .iter()
-                .find_map(|c| filter::comparator_requires_eq(c).then_some(c.clone()))
-        })
-        .flatten();
+    let requires_eq = search.version.as_ref().and_then(|v| {
+        v.comparators
+            .iter()
+            .find_map(|c| filter::comparator_requires_eq(c).then_some(c.clone()))
+    });
     let one_sort = requires_eq.is_some();
     let version = match requires_eq {
         Some(requires_eq) => Some(VersionReq {

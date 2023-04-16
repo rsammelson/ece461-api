@@ -101,7 +101,7 @@ pub async fn post_package(
         version,
         id,
         rating,
-        content,
+        content: _,
     } = scoring::rate_package(data).await.map_err(|e| {
         log::error!("{}", e);
         use RatingError::*;

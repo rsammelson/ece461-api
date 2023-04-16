@@ -65,7 +65,7 @@ impl TryFrom<GitUrl> for GithubUrl {
 pub(super) fn canonicalize_repo(url: &str) -> RatingResult<GithubUrl> {
     let err = || UrlParseError(url.to_string());
 
-    if let Ok(git_url) = GitUrl::parse(&url) {
+    if let Ok(git_url) = GitUrl::parse(url) {
         if let Ok(github_url) = git_url.try_into() {
             return Ok(github_url);
         }
@@ -79,10 +79,8 @@ pub(super) fn canonicalize_repo(url: &str) -> RatingResult<GithubUrl> {
 
     let len = url.split(':').count();
     let mut rest = url.split(':');
-    if len > 1 {
-        if rest.next().unwrap() != "github" {
-            return Err(err());
-        }
+    if len > 1 && rest.next().unwrap() != "github" {
+        return Err(err());
     }
 
     let mut split_slash = rest.next().ok_or_else(err)?.split('/');
@@ -120,7 +118,7 @@ impl TryFrom<&str> for UrlKind {
             .parse()
             .map_err(|e| log::error!("error parsing url: {}", e))?;
 
-        let ::url::Host::Domain(host) = url.host().ok_or_else(||())?
+        let ::url::Host::Domain(host) = url.host().ok_or(())?
         else {
             return Err(())
         };
@@ -152,7 +150,7 @@ impl TryFrom<&str> for UrlKind {
                 if let Some(mut name) = split.next() {
                     // might be of the form "npmjs.com/package/abc" or "npmjs.com/abc"
                     if name == "package" {
-                        name = split.next().ok_or_else(|| ())?;
+                        name = split.next().ok_or(())?;
                     }
                     Ok(Self::Npm(NpmUrl {
                         name: name.to_owned(),
