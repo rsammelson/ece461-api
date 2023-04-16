@@ -89,8 +89,6 @@ pub async fn update_package_by_id(
     Ok(())
 }
 
-// TODO: this was updated to only include the data field
-// needs to be pretty much entirely rewritten
 pub async fn post_package(
     Json(data): Json<PackageData>,
 ) -> Result<MyResponse<Package>, StatusCode> {
@@ -117,6 +115,7 @@ pub async fn post_package(
 
     log::error!("{:?}", rating);
     return Err(StatusCode::IM_A_TEAPOT);
+    todo!();
 
     // TODO: upload to obj storage
     let url = "".into();

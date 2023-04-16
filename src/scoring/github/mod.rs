@@ -1,10 +1,12 @@
 mod datetime;
 pub(super) mod graphql;
 
-use super::{url::GithubUrl, ScoringData};
+use super::{
+    url::{get_client, GithubUrl},
+    ScoringData,
+};
 
 use once_cell::sync::OnceCell;
-use reqwest::Client;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GraphQlError {
@@ -14,16 +16,7 @@ pub enum GraphQlError {
     ReqwestError(#[from] reqwest::Error),
 }
 
-pub fn get_client() -> Client {
-    static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
-    static CLIENT: OnceCell<Client> = OnceCell::new();
-    CLIENT
-        .get_or_init(|| {
-            Client::builder()
-                .user_agent(USER_AGENT)
-                .https_only(true)
-                .build()
-                .unwrap()
-        })
-        .clone()
+fn get_token() -> &'static str {
+    static TOKEN: OnceCell<String> = OnceCell::new();
+    TOKEN.get_or_init(|| std::env::var("GITHUB_TOKEN").unwrap())
 }

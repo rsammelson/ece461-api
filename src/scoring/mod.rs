@@ -2,9 +2,11 @@ mod github;
 mod path;
 mod url;
 
+use self::url::{get_client, NpmAbbrMetadata, NpmDist, NpmDistTags, NpmVersion, UrlKind};
 use crate::queries::types::{PackageData, PackageId, PackageRating};
 
 use base64::{engine::general_purpose, read::DecoderReader};
+use libflate::gzip;
 use semver::Version;
 use std::io::{self, Read};
 use zip::ZipArchive;
@@ -17,6 +19,8 @@ pub enum RatingError {
     MissingPackageJson,
     #[error("package.json did not contain a repository link")]
     MissingRepository,
+    #[error("npm api response did not contain tarball for latest version")]
+    CouldNotGetLatestVersion,
     #[error("could not convert repository url: `{0}`")]
     UrlParseError(String),
     #[error("{0}")]
@@ -29,6 +33,8 @@ pub enum RatingError {
     Base64Error(io::Error),
     #[error("{0}")]
     DeserializeError(#[from] serde_json::Error),
+    #[error("{0}")]
+    ReqwestError(#[from] reqwest::Error),
 }
 use RatingError::*;
 
@@ -60,14 +66,12 @@ async fn from_content(content: Vec<u8>) -> RatingResult<RatedPackage> {
     let id = PackageId::new();
     let path = format!("/tmp/{}", id.as_ref());
 
-    ZipArchive::new(buf)?.extract(&path)?;
+    let result = from_content_internal(buf, &path).await;
 
-    let (name, version, rating) = path::rating_from_path(&path).await?;
-
-    // can still score if the files weren't removed
     let _ = std::fs::remove_dir_all(&path)
         .map_err(|e| log::error!("Error removing files after scoring: `{}`", e));
 
+    let (name, version, rating) = result?;
     Ok(RatedPackage {
         name,
         version,
@@ -77,8 +81,86 @@ async fn from_content(content: Vec<u8>) -> RatingResult<RatedPackage> {
     })
 }
 
-async fn from_url(_url: &str) -> RatingResult<RatedPackage> {
-    todo!()
+// to catch errors and still remove temporary files if so
+async fn from_content_internal(
+    buf: io::Cursor<Vec<u8>>,
+    path: &str,
+) -> RatingResult<(String, Version, PackageRating)> {
+    ZipArchive::new(buf)?.extract(&path)?;
+    Ok(path::rating_from_path(&path).await?)
+}
+
+async fn from_url(url: &str) -> RatingResult<RatedPackage> {
+    let id = PackageId::new();
+    let path = format!("/tmp/{}", id.as_ref());
+
+    let result = from_url_internal(url, &path, id).await;
+
+    let _ = std::fs::remove_dir_all(&path)
+        .map_err(|e| log::error!("Error removing files after scoring: `{}`", e));
+
+    result
+}
+
+// to catch errors and still remove temporary files if so
+async fn from_url_internal(url: &str, path: &str, id: PackageId) -> RatingResult<RatedPackage> {
+    let url = url.try_into().map_err(|_| UrlParseError(url.to_string()))?;
+
+    let content = match url {
+        UrlKind::Github(url) => {
+            let content = get_client()
+                .get(format!(
+                    "https://api.github.com/repos/{}/{}/zipball",
+                    url.owner, url.name
+                ))
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .send()
+                .await?
+                .bytes()
+                .await?;
+
+            ZipArchive::new(io::Cursor::new(&content[..]))
+                .unwrap()
+                .extract(&path)
+                .unwrap();
+            content.into()
+        }
+        UrlKind::Npm(url) => {
+            let client = get_client();
+            let NpmAbbrMetadata {
+                dist_tags: NpmDistTags { latest },
+                versions,
+            } = client
+                .get(format!("https://registry.npmjs.org/{}", url.name))
+                .header("Accept", "application/vnd.npm.install-v1+json")
+                .send()
+                .await?
+                .json()
+                .await?;
+
+            let NpmVersion {
+                dist: NpmDist { tarball },
+            } = versions
+                .get(&latest)
+                .ok_or_else(|| CouldNotGetLatestVersion)?;
+
+            let tar_gz = client.get(tarball).send().await?.bytes().await?;
+            tar::Archive::new(gzip::Decoder::new(&tar_gz[..])?).unpack(&path)?;
+
+            let mut content = Vec::new();
+            path::zip_dir(&path, io::Cursor::new(&mut content))?;
+            content
+        }
+    };
+
+    let (name, version, rating) = path::rating_from_path(&path).await?;
+    Ok(RatedPackage {
+        name,
+        version,
+        id,
+        rating,
+        content,
+    })
 }
 
 struct ScoringData {

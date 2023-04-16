@@ -1,7 +1,6 @@
 use super::{datetime::DateTime, GithubUrl, GraphQlError, ScoringData};
 
 use graphql_client::GraphQLQuery;
-use once_cell::sync::OnceCell;
 
 #[allow(dead_code)]
 #[derive(GraphQLQuery)]
@@ -12,11 +11,6 @@ use once_cell::sync::OnceCell;
 )]
 pub struct GithubQuery;
 
-fn get_token() -> &'static str {
-    static TOKEN: OnceCell<String> = OnceCell::new();
-    TOKEN.get_or_init(|| std::env::var("GITHUB_TOKEN").unwrap())
-}
-
 pub(in crate::scoring) async fn query<T: Into<github_query::Variables>>(
     vars: T,
 ) -> Result<ScoringData, GraphQlError> {
@@ -25,7 +19,7 @@ pub(in crate::scoring) async fn query<T: Into<github_query::Variables>>(
     let body = GithubQuery::build_query(vars.into());
     let response = client
         .post("https://api.github.com/graphql")
-        .bearer_auth(get_token())
+        .bearer_auth(super::get_token())
         .json(&body)
         .send()
         .await?;

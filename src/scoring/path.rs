@@ -10,10 +10,12 @@ use git_url_parse::GitUrl;
 use semver::Version;
 use serde::Deserialize;
 use std::{
-    collections::VecDeque,
-    fs, io,
-    path::{Path, PathBuf},
+    ffi::OsStr,
+    fs::{self, File},
+    io::{self, Read, Seek, Write},
+    path::Path,
 };
+use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug, Deserialize)]
 struct Repository {
@@ -76,11 +78,16 @@ impl TryFrom<PackageJson> for PackageJsonVerified {
 pub(super) async fn rating_from_path<P: AsRef<Path>>(
     path: P,
 ) -> RatingResult<(String, Version, PackageRating)> {
-    let readme_exists = find_file(&path, |name| name.to_lowercase().contains("readme"))?.is_some();
+    let readme_exists = find_file(&path, |name| {
+        name.eq_ignore_ascii_case("readme") || name.eq_ignore_ascii_case("readme.md")
+    })
+    .is_some();
 
     let PackageJsonVerified { name, version, url } =
         serde_json::from_reader::<_, PackageJson>(io::BufReader::new(fs::File::open(
-            find_file(&path, |name| name == "package.json")?.ok_or_else(|| MissingPackageJson)?,
+            find_file(&path, |name| name == "package.json")
+                .ok_or_else(|| MissingPackageJson)?
+                .into_path(),
         )?))?
         .try_into()?;
 
@@ -94,30 +101,57 @@ pub(super) async fn rating_from_path<P: AsRef<Path>>(
     Ok((name, version, scores))
 }
 
-/// Breadth first traversal of the filesystem starting at the haystack, searching for a file whose
-/// name satisfies the given closure
-fn find_file<P: AsRef<Path>, F: Fn(String) -> bool>(
-    haystack: P,
-    needle: F,
-) -> Result<Option<PathBuf>, io::Error> {
-    let mut barn = VecDeque::from([haystack.as_ref().to_path_buf()]);
-    while let Some(haystack) = barn.pop_front() {
-        for entry in fs::read_dir(haystack)? {
-            let entry = entry?;
-            let path = entry.path();
+fn find_file<P: AsRef<Path>, F: Fn(&OsStr) -> bool>(haystack: P, needle: F) -> Option<DirEntry> {
+    let walker = WalkDir::new(haystack).into_iter();
+    walker
+        .filter_map(|e| e.ok())
+        .find(|e| needle(e.file_name()))
+}
 
-            if path.is_dir() {
-                barn.push_back(path);
-            } else {
-                let name = match entry.file_name().into_string() {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                if needle(name) {
-                    return Ok(Some(path));
-                }
-            }
+/// https://github.com/zip-rs/zip/blob/master/examples/write\_dir.rs
+fn zip_dir_internal<T>(
+    it: &mut dyn Iterator<Item = DirEntry>,
+    prefix: &str,
+    writer: T,
+) -> zip::result::ZipResult<()>
+where
+    T: Write + Seek,
+{
+    let mut zip = zip::ZipWriter::new(writer);
+    let options = zip::write::FileOptions::default();
+
+    let mut buffer = Vec::new();
+    for entry in it {
+        let path = entry.path();
+        let name = path.strip_prefix(Path::new(prefix)).unwrap();
+
+        if path.is_file() {
+            zip.start_file(name.to_string_lossy(), options)?;
+            let mut f = File::open(path)?;
+
+            f.read_to_end(&mut buffer)?;
+            zip.write_all(&buffer)?;
+            buffer.clear();
+        } else if !name.as_os_str().is_empty() {
+            zip.add_directory(name.to_string_lossy(), options)?;
         }
     }
-    Ok(None)
+    zip.finish()?;
+    Result::Ok(())
+}
+
+pub fn zip_dir<T>(src_dir: &str, dst: T) -> zip::result::ZipResult<()>
+where
+    T: Write + Seek,
+{
+    if !Path::new(src_dir).is_dir() {
+        return Err(zip::result::ZipError::FileNotFound);
+    }
+
+    let walkdir = WalkDir::new(src_dir);
+    let it = walkdir.into_iter();
+
+    zip_dir_internal(&mut it.filter_map(|e| e.ok()), src_dir, dst)?;
+
+    Ok(())
 }
