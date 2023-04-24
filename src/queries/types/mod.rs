@@ -1,9 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-use crate::{database, user::User};
+use crate::database;
 
-use chrono::{DateTime, Utc};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -91,31 +90,6 @@ pub const PACKAGE_FIELDS: [&str; 4] = [
     database::URL,
 ];
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
-pub struct PackageHistoryEntry {
-    #[serde(rename = "User")]
-    pub user: User,
-    #[serde(rename = "Date")]
-    pub date: DateTime<Utc>,
-    #[serde(rename = "PackageMetadata")]
-    pub metadata: PackageMetadata,
-    #[serde(rename = "Action")]
-    pub action: PackageHistoryAction,
-}
-
-#[cfg_attr(test, derive(strum::EnumIter))]
-#[derive(Debug, PartialEq, Eq, Serialize)]
-pub enum PackageHistoryAction {
-    #[serde(rename = "CREATE")]
-    Create,
-    #[serde(rename = "UPDATE")]
-    Update,
-    #[serde(rename = "DOWNLOAD")]
-    Download,
-    #[serde(rename = "RATE")]
-    Rate,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PackageRating {
     #[serde(rename = "BusFactor")]
@@ -130,6 +104,26 @@ pub struct PackageRating {
     pub license_score: f64,
     #[serde(rename = "GoodPinningPractice")]
     pub good_pinning_practice: f64,
+    #[serde(rename = "PullRequest")]
+    pub pull_request: f64,
+    #[serde(rename = "NetScore")]
+    pub net_score: f64,
+}
+
+impl PackageRating {
+    pub fn set_net_score(self) -> Self {
+        PackageRating {
+            net_score: (self.bus_factor
+                + self.correctness
+                + self.ramp_up
+                + self.responsive_maintainer
+                + self.license_score
+                + self.good_pinning_practice
+                + self.pull_request)
+                / 7.,
+            ..self
+        }
+    }
 }
 
 pub const RATING_FIELDS: [&str; 6] = [

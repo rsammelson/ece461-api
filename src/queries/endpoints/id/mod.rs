@@ -116,6 +116,7 @@ pub async fn post_package(
     log::error!("{:?}", rating);
     return Err(StatusCode::IM_A_TEAPOT);
     todo!();
+    // TODO: reject if score too low
 
     // TODO: upload to obj storage
     let url = "".into();

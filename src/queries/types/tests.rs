@@ -1,7 +1,5 @@
 use super::*;
-use crate::user::User;
 
-use chrono::{DateTime, NaiveDate, Utc};
 use semver::Version;
 use uuid::Uuid;
 
@@ -91,43 +89,4 @@ fn data_only_one_field() {
     if let Ok(_) = deserialized {
         panic!("Expected to only be able to set one of the fields of `data`");
     }
-}
-
-#[test]
-fn ser_history_entry() {
-    let naivedatetime_utc = NaiveDate::from_ymd_opt(2000, 1, 12)
-        .unwrap()
-        .and_hms_opt(2, 0, 0)
-        .unwrap();
-
-    let metadata = PackageMetadata {
-        name: "".to_string(),
-        version: Version::parse("0.0.0").unwrap(),
-        id: uuid::Uuid::nil().into(),
-    };
-
-    let data = PackageHistoryEntry {
-        user: User {
-            name: "jim".to_string(),
-            is_admin: false,
-        },
-        date: DateTime::from_utc(naivedatetime_utc, Utc),
-        metadata,
-        action: PackageHistoryAction::Create,
-    };
-
-    let serialized = serde_json::to_string(&data).unwrap();
-    assert_eq!(
-        serialized,
-        r#"{"User":{"Name":"jim","isAdmin":false},"Date":"2000-01-12T02:00:00Z","PackageMetadata":{"Name":"","Version":"0.0.0","ID":"00000000-0000-0000-0000-000000000000"},"Action":"CREATE"}"#
-    )
-}
-
-#[test]
-fn ser_history_actions() {
-    use strum::IntoEnumIterator;
-    let data = PackageHistoryAction::iter().collect::<Vec<_>>();
-
-    let serialized = serde_json::to_string(&data).unwrap();
-    assert_eq!(serialized, r#"["CREATE","UPDATE","DOWNLOAD","RATE"]"#);
 }

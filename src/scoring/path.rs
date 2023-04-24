@@ -1,6 +1,7 @@
 use super::{
     github,
     url::{canonicalize_repo, GithubUrl},
+    version,
     RatingError::{self, *},
     RatingResult, ScoringData,
 };
@@ -10,6 +11,7 @@ use git_url_parse::GitUrl;
 use semver::Version;
 use serde::Deserialize;
 use std::{
+    collections::HashMap,
     ffi::OsStr,
     fs::{self, File},
     io::{self, Read, Seek, Write},
@@ -29,14 +31,20 @@ enum PackageJson {
         name: String,
         version: Version,
         repository: Repository,
+        dependencies: Option<HashMap<String, String>>,
     },
     Flat {
         name: String,
         version: Version,
         repository: String,
+        dependencies: Option<HashMap<String, String>>,
     },
     #[allow(dead_code)]
-    NoRepo { name: String, version: Version },
+    NoRepo {
+        name: String,
+        version: Version,
+        dependencies: Option<HashMap<String, String>>,
+    },
 }
 
 #[derive(Debug)]
@@ -44,6 +52,7 @@ struct PackageJsonVerified {
     name: String,
     version: Version,
     url: GithubUrl,
+    dependencies: HashMap<String, String>,
 }
 
 impl TryFrom<PackageJson> for PackageJsonVerified {
@@ -55,21 +64,31 @@ impl TryFrom<PackageJson> for PackageJsonVerified {
                 name,
                 version,
                 repository,
+                dependencies,
             } => Ok(PackageJsonVerified {
                 name,
                 version,
                 url: canonicalize_repo(&repository)?,
+                dependencies: match dependencies {
+                    Some(map) => map,
+                    None => HashMap::new(),
+                },
             }),
             PackageJson::Deep {
                 name,
                 version,
                 repository: Repository { url },
+                dependencies,
             } => Ok(PackageJsonVerified {
                 name,
                 version,
                 url: GitUrl::parse(&url)
                     .try_into()
                     .map_err(|_| UrlParseError(url))?,
+                dependencies: match dependencies {
+                    Some(map) => map,
+                    None => HashMap::new(),
+                },
             }),
         }
     }
@@ -83,20 +102,27 @@ pub(super) async fn rating_from_path<P: AsRef<Path>>(
     })
     .is_some();
 
-    let PackageJsonVerified { name, version, url } =
-        serde_json::from_reader::<_, PackageJson>(io::BufReader::new(fs::File::open(
-            find_file(&path, |name| name == "package.json")
-                .ok_or_else(|| MissingPackageJson)?
-                .into_path(),
-        )?))?
-        .try_into()?;
+    let PackageJsonVerified {
+        name,
+        version,
+        url,
+        dependencies,
+    } = serde_json::from_reader::<_, PackageJson>(io::BufReader::new(fs::File::open(
+        find_file(&path, |name| name == "package.json")
+            .ok_or_else(|| MissingPackageJson)?
+            .into_path(),
+    )?))?
+    .try_into()?;
 
-    let data = ScoringData {
+    let scoring_data = ScoringData {
         readme_exists,
         ..github::graphql::query(url).await?
     };
 
-    let scores = data.into();
+    let good_pinning_practice = version::score_versionreq_pinned(dependencies);
+    let pull_request = 0.;
+
+    let scores = (scoring_data, good_pinning_practice, pull_request).into();
 
     Ok((name, version, scores))
 }

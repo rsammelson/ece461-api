@@ -1,6 +1,7 @@
 mod github;
 mod path;
 mod url;
+mod version;
 
 use self::url::{get_client, NpmAbbrMetadata, NpmDist, NpmDistTags, NpmVersion, UrlKind};
 use crate::queries::types::{PackageData, PackageId, PackageRating};
@@ -102,6 +103,7 @@ async fn from_url(url: &str) -> RatingResult<RatedPackage> {
     result
 }
 
+// TODO: content should be base64 encoded before returning
 // to catch errors and still remove temporary files if so
 async fn from_url_internal(url: &str, path: &str, id: PackageId) -> RatingResult<RatedPackage> {
     let url = url.try_into().map_err(|_| UrlParseError(url.to_string()))?;
@@ -173,17 +175,21 @@ struct ScoringData {
     license_correct: bool,
 }
 
-impl From<ScoringData> for PackageRating {
+impl From<(ScoringData, f64, f64)> for PackageRating {
     fn from(
-        ScoringData {
-            readme_exists,
-            documentation_exists,
-            issues_closed,
-            issues_total,
-            num_contributors,
-            weeks_since_last_issue,
-            license_correct,
-        }: ScoringData,
+        (
+            ScoringData {
+                readme_exists,
+                documentation_exists,
+                issues_closed,
+                issues_total,
+                num_contributors,
+                weeks_since_last_issue,
+                license_correct,
+            },
+            good_pinning_practice,
+            pull_request,
+        ): (ScoringData, f64, f64),
     ) -> Self {
         let bus_factor = 1. - (1. / num_contributors.max(1) as f64);
         let correctness = (issues_closed as f64 / issues_total as f64).max(0.).min(1.);
@@ -191,7 +197,7 @@ impl From<ScoringData> for PackageRating {
             if readme_exists { 0.5 } else { 0. } + if documentation_exists { 0.5 } else { 0. };
         let responsive_maintainer = (1. / weeks_since_last_issue).max(0.).min(1.);
         let license_score = if license_correct { 1. } else { 0. };
-        let good_pinning_practice = 0.;
+
         PackageRating {
             bus_factor,
             correctness,
@@ -199,6 +205,9 @@ impl From<ScoringData> for PackageRating {
             responsive_maintainer,
             license_score,
             good_pinning_practice,
+            pull_request,
+            net_score: 0.,
         }
+        .set_net_score()
     }
 }

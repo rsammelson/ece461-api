@@ -1,3 +1,5 @@
+#![feature(try_trait_v2)]
+
 mod database;
 mod package;
 mod queries;
@@ -21,8 +23,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cors_inner = CorsLayer::new()
         .allow_origin(HeaderValue::from_static("https://web.gcp.sammelson.com"))
-        .allow_origin(tower_http::cors::Any)
-        .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("offset")])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            HeaderName::from_static("offset"),
+            HeaderName::from_static("X-Authorization"),
+        ])
         .expose_headers([HeaderName::from_static("offset")])
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]);
 
@@ -49,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .delete(delete_package_by_id),
         )
         .route("/packages", post(search_packages))
-        .route("/package/{id}/:rate", get(get_rating_by_id))
+        .route("/package/:id/rate", get(get_rating_by_id))
         .route("/authenticate", put(authenticate))
         .route(
             "/package/byName/:name",

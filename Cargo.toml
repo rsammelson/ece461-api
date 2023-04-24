@@ -9,12 +9,13 @@ axum = { version = "0.6", features = ["http2"] }
 base64 = "0.21"
 chrono = { version = "0.4", features = ["serde"] }
 env_logger = "0.10"
-firestore = "0.31"
+firestore = "0.32"
 futures = "0.3"
 git-url-parse = "0.4"
 graphql_client = "0.12"
 libflate = "1"
 log = "0.4"
+num-traits = "0.2"
 once_cell = "1"
 reqwest = "0.11"
 semver = { version = "1", features = ["serde"] }
@@ -31,6 +32,8 @@ walkdir = "2"
 zip = "0.6"
 
 [dev-dependencies]
+quickcheck = "1"
+quickcheck_macros = "1"
 serde_test = "1"
 strum = { version = "0.24", features = ["derive"] }
 test-log = "0.2"
