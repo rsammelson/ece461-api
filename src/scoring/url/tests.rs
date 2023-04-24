@@ -91,4 +91,12 @@ fn url_kind_parse() {
 
     let data = "https://badsite.com/abc/def";
     <&str as TryInto<UrlKind>>::try_into(data).unwrap_err();
+
+    let data = "git+https://github.com/rtfeldman/node-test-runner.git";
+    let result: UrlKind = data.try_into().unwrap();
+    let expected = UrlKind::Github(GithubUrl {
+        name: "node-test-runner".to_string(),
+        owner: "rtfeldman".to_string(),
+    });
+    assert_eq!(result, expected);
 }

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use super::{
     github,
     url::{canonicalize_repo, GithubUrl},
@@ -19,7 +22,7 @@ use std::{
 };
 use walkdir::{DirEntry, WalkDir};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 struct Repository {
     url: String,
 }

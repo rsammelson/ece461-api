@@ -137,7 +137,7 @@ impl TryFrom<&str> for UrlKind {
                 let mut split = url.path().trim_matches('/').split('/');
                 if let (Some(owner), Some(name)) = (split.next(), split.next()) {
                     Ok(Self::Github(GithubUrl {
-                        name: name.to_owned(),
+                        name: name.trim_end_matches(".git").to_owned(),
                         owner: owner.to_owned(),
                     }))
                 } else {
