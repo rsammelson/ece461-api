@@ -123,10 +123,11 @@ pub(super) async fn rating_from_path<P: AsRef<Path>>(
     };
 
     let good_pinning_practice = version::score_versionreq_pinned(dependencies);
-    let pull_request = 0.;
+
+    // TODO!
+    let pull_request = 1.;
 
     let scores = (scoring_data, good_pinning_practice, pull_request).into();
-
     Ok((name, version, scores))
 }
 

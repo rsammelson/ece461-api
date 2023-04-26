@@ -1,7 +1,6 @@
 #![feature(try_trait_v2)]
 
 mod database;
-mod package;
 mod queries;
 mod scoring;
 mod user;
