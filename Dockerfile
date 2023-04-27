@@ -14,9 +14,11 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
 RUN cargo build --release --bin api
+RUN apt-get update && apt-get install -y ca-certificates pkg-config libssl-dev
 
 # Run the web service on container startup.
 FROM debian:bullseye-slim AS runtime
 WORKDIR api
 COPY --from=builder /api/target/release/api /usr/local/bin
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENTRYPOINT ["/usr/local/bin/api"]

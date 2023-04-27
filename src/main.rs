@@ -1,5 +1,3 @@
-#![feature(try_trait_v2)]
-
 mod database;
 mod queries;
 mod scoring;
@@ -25,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allow_headers([
             header::CONTENT_TYPE,
             HeaderName::from_static("offset"),
-            HeaderName::from_static("X-Authorization"),
+            // HeaderName::from_static("X-Authorization"),
         ])
         .expose_headers([HeaderName::from_static("offset")])
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]);

@@ -5,7 +5,7 @@ use num_traits::{One, SaturatingAdd};
 use semver::{Comparator, VersionReq};
 use std::{
     collections::HashMap,
-    ops::{Bound, FromResidual, RangeBounds, Try},
+    ops::{Bound, RangeBounds},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -18,26 +18,6 @@ enum PinStatus {
     Within(Range<u64>),
     Less(u64),
     GreaterEq(u64),
-}
-
-// hehe short circuiting
-impl Try for PinStatus {
-    type Output = Self;
-    type Residual = Self;
-    fn from_output(output: Self::Output) -> Self {
-        output
-    }
-    fn branch(self) -> std::ops::ControlFlow<Self::Residual, Self::Output> {
-        match self {
-            Self::None => std::ops::ControlFlow::Break(Self::None),
-            s => std::ops::ControlFlow::Continue(s),
-        }
-    }
-}
-impl FromResidual for PinStatus {
-    fn from_residual(residual: <Self as Try>::Residual) -> Self {
-        residual
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -157,7 +137,7 @@ fn versionreq_pinned(req: &VersionReq) -> bool {
     let major = req
         .comparators
         .iter()
-        .try_fold(PinStatus::Any, |m, c| m.update(comparator_major_pinned(c)));
+        .fold(PinStatus::Any, |m, c| m.update(comparator_major_pinned(c)));
 
     if !matches!(major, PinStatus::Pinned(_)) {
         return false;
@@ -166,7 +146,7 @@ fn versionreq_pinned(req: &VersionReq) -> bool {
     let minor = req
         .comparators
         .iter()
-        .try_fold(PinStatus::Any, |m, c| m.update(comparator_minor_pinned(c)));
+        .fold(PinStatus::Any, |m, c| m.update(comparator_minor_pinned(c)));
 
     if !matches!(minor, PinStatus::Pinned(_)) {
         return false;
