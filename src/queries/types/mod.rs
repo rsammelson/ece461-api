@@ -78,6 +78,7 @@ impl From<database::DatabaseEntry> for Package {
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PackageWithUrl {
+    #[serde(flatten)]
     pub metadata: PackageMetadata,
     #[serde(rename = "URL")]
     pub url: String,

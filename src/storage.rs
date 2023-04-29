@@ -71,7 +71,8 @@ impl CloudStorage {
             .list_objects()
             .await?
             .into_iter()
-            .map(|o| o.name.unwrap())
+            .map(|o| o.name)
+            .flatten()
             .collect();
         for name in names {
             self.delete_object(name).await?;

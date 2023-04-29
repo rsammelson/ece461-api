@@ -15,7 +15,7 @@ use axum::{
 /// Reset the registry
 ///
 /// Reset the registry to a system default state.
-// TODO: have to have this for baseline requirements
+// TODO: clear metadata
 pub async fn reset_registry() -> Result<StatusCode, StatusCode> {
     // 200: reset registry
     let storage = CloudStorage::new()

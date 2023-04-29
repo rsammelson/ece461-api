@@ -65,6 +65,8 @@ impl TryFrom<GitUrl> for GithubUrl {
 pub(super) fn canonicalize_repo(url: &str) -> RatingResult<GithubUrl> {
     let err = || UrlParseError(url.to_string());
 
+    let url = url.trim_start_matches("git+");
+
     if let Ok(git_url) = GitUrl::parse(url) {
         if let Ok(github_url) = git_url.try_into() {
             return Ok(github_url);

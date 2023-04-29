@@ -85,7 +85,7 @@ impl TryFrom<PackageJson> for PackageJsonVerified {
             } => Ok(PackageJsonVerified {
                 name,
                 version,
-                url: GitUrl::parse(&url)
+                url: GitUrl::parse(&url.trim_start_matches("git+"))
                     .try_into()
                     .map_err(|_| UrlParseError(url))?,
                 dependencies: match dependencies {

@@ -66,7 +66,11 @@ pub async fn get_package_by_id(
     // exodus is expensive from api, cheap from obj storage
     // they can just download it directly from there
     let db = database::get_database().await;
-    find_package_by_id(&db, id, PACKAGE_FIELDS).await.map(ok)
+    let PackageWithUrl { metadata, url } = find_package_by_id(&db, id, PACKAGE_FIELDS).await?;
+    Ok(ok(Package {
+        metadata,
+        data: PackageData::Url(url),
+    }))
 }
 
 /// Update the content of the package.
@@ -122,13 +126,17 @@ pub async fn update_package_by_id(
     }
 
     // upload to obj storage
-    let storage = CloudStorage::new()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let storage = CloudStorage::new().await.map_err(|e| {
+        log::error!("cloud storage handle error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let url = storage
-        .put_object(name, content)
+        .put_object(name.clone(), content)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            log::error!("cloud storage put error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let entry = DatabaseEntry {
         metadata,

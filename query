@@ -1,0 +1,51 @@
+#!/bin/bash
+
+query_nodata () {
+    x=$(curl -s $API_BASE/$1 -w '\n%{http_code}\n')
+    echo ${x%$'\n'*} | jq
+    echo $x | tail -c 4
+}
+
+query_json () {
+    x=$(curl -s -X $1 $API_BASE/$2 -H 'Content-Type:application/json' -d $3 -w '\n%{http_code}\n')
+    echo ${x%$'\n'*} | jq
+    echo $x | tail -c 4
+}
+
+if [[ -z "${BASE}" ]]; then
+    API_BASE="localhost:8080"
+else
+    API_BASE="${BASE}"
+fi
+
+if [ $# -lt 2 ] ; then
+    echo "Usage: $0 <endpoint> <data>"
+    exit 1
+fi
+
+case $1 in
+
+    search)
+        if [ $# -gt 2 ] ; then
+            query_json POST packages "[{\"Name\":\"$2\",\"Version\":\"$3\"}]"
+        else
+            query_json POST packages "[{\"Name\":\"$2\"}]"
+        fi
+        ;;
+
+    rate)
+        query_nodata package/$2/rate
+        ;;
+
+    get)
+        query_nodata package/$2
+        ;;
+
+    new)
+        query_json POST package "{\"URL\":\"$2\"}"
+        ;;
+
+    *)
+        echo "$1 not recognized"
+        ;;
+esac
