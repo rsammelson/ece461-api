@@ -32,9 +32,11 @@ pub const VERSION: &str = "Version";
 pub const ID: &str = "ID";
 pub const URL: &str = "URL";
 
+pub const NET_SCORE: &str = "NetScore";
 pub const BUS_FACTOR: &str = "BusFactor";
 pub const CORRECTNESS: &str = "Correctness";
 pub const RAMP_UP: &str = "RampUp";
 pub const RESPONSIVE_MAINTAINER: &str = "ResponsiveMaintainer";
 pub const LICENSE_SCORE: &str = "LicenseScore";
 pub const GOOD_PINNING_PRACTICE: &str = "GoodPinningPractice";
+pub const PULL_REQUEST: &str = "PullRequest";

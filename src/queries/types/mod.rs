@@ -126,11 +126,13 @@ impl PackageRating {
     }
 }
 
-pub const RATING_FIELDS: [&str; 6] = [
+pub const RATING_FIELDS: [&str; 8] = [
+    database::NET_SCORE,
     database::BUS_FACTOR,
     database::CORRECTNESS,
     database::RAMP_UP,
     database::RESPONSIVE_MAINTAINER,
     database::LICENSE_SCORE,
     database::GOOD_PINNING_PRACTICE,
+    database::PULL_REQUEST,
 ];
