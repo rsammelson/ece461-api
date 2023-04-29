@@ -4,6 +4,7 @@ use super::{ok, types::*, MyResponse};
 use crate::{
     database::{self, DatabaseEntry},
     scoring::{self, RatedPackage, RatingError},
+    storage::CloudStorage,
 };
 
 use axum::{
@@ -92,7 +93,7 @@ pub async fn update_package_by_id(
         name,
         version,
         rating,
-        content: _,
+        content,
         ..
     } = scoring::rate_package(data)
         .await
@@ -120,10 +121,14 @@ pub async fn update_package_by_id(
         return Err(StatusCode::FAILED_DEPENDENCY);
     }
 
-    // TODO: upload to obj storage
-    //       - remove old version?
-    // TODO: update url in metadata to new location
-    let url = "".into();
+    // upload to obj storage
+    let storage = CloudStorage::new()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let url = storage
+        .put_object(name, content)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let entry = DatabaseEntry {
         metadata,
@@ -155,7 +160,7 @@ pub async fn post_package(
         version,
         id,
         rating,
-        content: _,
+        content,
     } = scoring::rate_package(data)
         .await
         .map_err(scoring_err_to_response)?;
@@ -164,8 +169,14 @@ pub async fn post_package(
         return Err(StatusCode::FAILED_DEPENDENCY);
     }
 
-    // TODO: upload to obj storage
-    let url = "".into();
+    // upload to obj storage
+    let storage = CloudStorage::new()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let url = storage
+        .put_object(name.clone(), content)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let db = database::get_database().await;
 
