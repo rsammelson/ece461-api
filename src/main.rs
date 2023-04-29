@@ -4,6 +4,9 @@ mod scoring;
 mod storage;
 mod user;
 
+#[cfg(feature = "log_request_response")]
+mod log;
+
 use queries::*;
 
 use axum::{
@@ -42,7 +45,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             HeaderValue::from_static("no-store"),
         ));
 
-    // build our application with a single route
     let app = Router::new()
         .route("/package", post(queries::post_package))
         .route(
@@ -61,6 +63,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/package/byRegEx", get(get_package_by_regex))
         .route("/reset", delete(reset_registry))
         .layer(cors);
+
+    #[cfg(feature = "log_request_response")]
+    let app = app.layer(axum::middleware::from_fn(log::print_request_response));
 
     axum::Server::bind(&SocketAddr::new(
         IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),

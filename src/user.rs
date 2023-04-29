@@ -10,7 +10,6 @@ pub struct AuthenticationRequest {
 
 #[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
-    #[serde(rename = "Name")]
     pub name: String,
     #[serde(rename = "isAdmin")]
     pub is_admin: bool,
