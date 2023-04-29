@@ -59,7 +59,7 @@ async fn clear_metadata() -> Result<(), StatusCode> {
 
     // execute batch write
     batch.write().await.map_err(|e| {
-        log::error!("error while executing metadata deletions: {}", e);
+        log::error!("while executing metadata deletions: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     // not sure if this is needed?
@@ -70,11 +70,11 @@ async fn clear_metadata() -> Result<(), StatusCode> {
 
 async fn clear_bucket() -> Result<(), StatusCode> {
     let storage = CloudStorage::new().await.map_err(|e| {
-        log::error!("error while getting storage bucket: {}", e);
+        log::error!("while getting storage bucket: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    storage.delete_all().await.map_err(|e| {
-        log::error!("error while executing bucket deletion: {}", e);
+    storage.delete_all().await.map_err(|_| {
+        log::error!("while executing bucket deletion");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     Ok(())

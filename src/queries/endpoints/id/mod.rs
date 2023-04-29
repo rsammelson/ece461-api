@@ -1,6 +1,8 @@
 use firestore::FirestoreDb;
+use futures::FutureExt;
+use tokio::join;
 
-use super::{ok, types::*, MyResponse};
+use super::{ok, respond, types::*, MyResponse};
 use crate::{
     database::{self, DatabaseEntry},
     scoring::{self, RatedPackage, RatingError},
@@ -131,7 +133,7 @@ pub async fn update_package_by_id(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let url = storage
-        .put_object(name.clone(), content)
+        .put_object(previous.metadata.id.as_ref().to_owned(), content)
         .await
         .map_err(|e| {
             log::error!("cloud storage put error: {}", e);
@@ -202,7 +204,7 @@ pub async fn post_package(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let url = storage
-        .put_object(name.clone(), content)
+        .put_object(id.as_ref().to_owned(), content)
         .await
         .map_err(|e| {
             log::error!("cloud storage put error: {}", e);
@@ -230,7 +232,7 @@ pub async fn post_package(
         })?;
 
     // 201: return package
-    Ok(ok(entry.into()))
+    Ok(respond(StatusCode::CREATED, entry.into()))
 }
 
 pub async fn get_rating_by_id(
@@ -242,8 +244,34 @@ pub async fn get_rating_by_id(
 
 /// Delete this version of the package.
 // not in baseline requirements
-pub async fn delete_package_by_id(Path(_id): Path<PackageId>) -> StatusCode {
+pub async fn delete_package_by_id(Path(path_id): Path<PackageId>) -> Result<(), StatusCode> {
     // 200: package deleted
     // 404: does not exist
-    StatusCode::NOT_IMPLEMENTED
+    let db = database::get_database().await;
+
+    let PackageWithUrl {
+        metadata: PackageMetadata { id, .. },
+        ..
+    } = find_package_by_id(&db, path_id, PACKAGE_FIELDS).await?;
+
+    let storage = CloudStorage::new().await.map_err(|e| {
+        log::error!("while getting storage bucket: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    match join!(
+        storage.delete_object(id.as_ref().to_owned()),
+        db.fluent()
+            .delete()
+            .from(database::METADATA)
+            .document_id(id)
+            .execute()
+            .map(|r| r.map_err(|e| {
+                log::error!("deleting metadata: {}", e);
+                ()
+            })),
+    ) {
+        (Ok(_), Ok(_)) => Ok(()),
+        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }

@@ -55,6 +55,10 @@ case $1 in
         query_nodata_method DELETE reset
         ;;
 
+    delete)
+        query_nodata_method DELETE package/$2
+        ;;
+
     *)
         echo "$1 not recognized"
         ;;
