@@ -1,10 +1,13 @@
 mod id;
 mod search;
+use firestore::{FirestoreStreamingBatchWriteOptions, FirestoreStreamingBatchWriter};
 pub use id::*;
 pub use search::*;
+use serde::Deserialize;
+use tokio::join;
 
-use super::*;
-use crate::{storage::CloudStorage, user::AuthenticationRequest};
+use super::{types::PackageId, *};
+use crate::{database, storage::CloudStorage, user::AuthenticationRequest};
 
 use axum::{
     extract::{Json, Path},
@@ -12,20 +15,81 @@ use axum::{
     response::IntoResponse,
 };
 
+async fn clear_metadata() -> Result<(), StatusCode> {
+    #[derive(Deserialize, Debug)]
+    struct JustId {
+        #[serde(rename = "ID")]
+        id: PackageId,
+    }
+
+    // read all ids
+    let db = database::get_database().await;
+    let all_ids: Vec<JustId> = db
+        .fluent()
+        .select()
+        .fields([database::ID])
+        .from(database::METADATA)
+        .obj()
+        .query()
+        .await
+        .map_err(|e| {
+            log::error!("error reading IDs during delete: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // create a batch writer
+    let (batch_stream, _) =
+        FirestoreStreamingBatchWriter::new(db.clone(), FirestoreStreamingBatchWriteOptions::new())
+            .await
+            .map_err(|e| {
+                log::error!("something went wrong creating a batch: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+    // add all delete operations to batch writer
+    let mut batch = batch_stream.new_batch();
+    for id in all_ids {
+        batch
+            .delete_by_id(database::METADATA, id.id, None)
+            .map_err(|e| {
+                log::error!("batch.delete_by_id() returned err: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // execute batch write
+    batch.write().await.map_err(|e| {
+        log::error!("error while executing metadata deletions: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    // not sure if this is needed?
+    batch_stream.finish().await;
+
+    Ok(())
+}
+
+async fn clear_bucket() -> Result<(), StatusCode> {
+    let storage = CloudStorage::new().await.map_err(|e| {
+        log::error!("error while getting storage bucket: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    storage.delete_all().await.map_err(|e| {
+        log::error!("error while executing bucket deletion: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(())
+}
+
 /// Reset the registry
 ///
 /// Reset the registry to a system default state.
 // TODO: clear metadata
 pub async fn reset_registry() -> Result<StatusCode, StatusCode> {
     // 200: reset registry
-    let storage = CloudStorage::new()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    storage
-        .delete_all()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(StatusCode::OK)
+    match join!(clear_metadata(), clear_bucket()) {
+        (Err(_), _) | (_, Err(_)) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => Ok(StatusCode::OK),
+    }
 }
 
 /// Create an access token.

@@ -3,18 +3,19 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use http::request::Parts;
 use hyper::{Body, Request, StatusCode};
 use std::fmt::Display;
 
-enum Direction {
-    Request,
+enum Direction<'a> {
+    Request(&'a Parts),
     Response,
 }
 
-impl Display for Direction {
+impl Display for Direction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Direction::Request => f.write_str("request"),
+            Direction::Request(parts) => write!(f, "request {} {}", parts.method, parts.uri),
             Direction::Response => f.write_str("response"),
         }
     }
@@ -31,7 +32,7 @@ where
     B::Error: std::fmt::Display,
 {
     let (parts, body) = req.into_parts();
-    let bytes = buffer_and_print(Direction::Request, body).await?;
+    let bytes = buffer_and_print(Direction::Request(&parts), body).await?;
     let req = Request::from_parts(parts, B::from(bytes));
 
     let res = next.run(req).await;
@@ -43,7 +44,10 @@ where
     Ok(res)
 }
 
-async fn buffer_and_print<B>(direction: Direction, body: B) -> Result<Bytes, (StatusCode, String)>
+async fn buffer_and_print<B>(
+    direction: Direction<'_>,
+    body: B,
+) -> Result<Bytes, (StatusCode, String)>
 where
     B: axum::body::HttpBody<Data = Bytes>,
     B::Error: std::fmt::Display,

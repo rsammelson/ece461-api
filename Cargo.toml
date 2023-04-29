@@ -19,6 +19,7 @@ futures = "0.3"
 gcloud-sdk = { version = "0.20.1", features = ["google-rest-storage-v1", "rest"] }
 git-url-parse = "0.4"
 graphql_client = "0.12"
+http = "0.2"
 hyper = "0.14"
 libflate = "1"
 log = "0.4"

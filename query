@@ -6,6 +6,12 @@ query_nodata () {
     echo $x | tail -c 4
 }
 
+query_nodata_method () {
+    x=$(curl -s -X $1 $API_BASE/$2 -w '\n%{http_code}\n')
+    echo ${x%$'\n'*} | jq
+    echo $x | tail -c 4
+}
+
 query_json () {
     x=$(curl -s -X $1 $API_BASE/$2 -H 'Content-Type:application/json' -d $3 -w '\n%{http_code}\n')
     echo ${x%$'\n'*} | jq
@@ -18,7 +24,7 @@ else
     API_BASE="${BASE}"
 fi
 
-if [ $# -lt 2 ] ; then
+if [ $# -lt 2 ] || [ $# -eq 1 ] && [ $1 != "reset" ]; then
     echo "Usage: $0 <endpoint> <data>"
     exit 1
 fi
@@ -43,6 +49,10 @@ case $1 in
 
     new)
         query_json POST package "{\"URL\":\"$2\"}"
+        ;;
+
+    reset)
+        query_nodata_method DELETE reset
         ;;
 
     *)
