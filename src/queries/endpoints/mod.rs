@@ -4,7 +4,7 @@ pub use id::*;
 pub use search::*;
 
 use super::*;
-use crate::user::AuthenticationRequest;
+use crate::{storage::CloudStorage, user::AuthenticationRequest};
 
 use axum::{
     extract::{Json, Path},
@@ -16,10 +16,16 @@ use axum::{
 ///
 /// Reset the registry to a system default state.
 // TODO: have to have this for baseline requirements
-pub async fn reset_registry() -> impl IntoResponse {
+pub async fn reset_registry() -> Result<StatusCode, StatusCode> {
     // 200: reset registry
-    // 401: not authorized
-    StatusCode::NOT_IMPLEMENTED
+    let storage = CloudStorage::new()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    storage
+        .delete_all()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
 }
 
 /// Create an access token.

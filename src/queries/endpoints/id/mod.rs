@@ -43,7 +43,7 @@ where
 /// Some of the errors returned by scoring are server errors, some are because of a bad request
 /// This takes the rating error and transforms it into the appropriate status code (400 or 500)
 fn scoring_err_to_response(e: RatingError) -> StatusCode {
-    log::error!("{}", e);
+    log::error!("scoring error: {:?}", e);
     use RatingError::*;
     match e {
         MissingPackageJson | MissingRepository | UrlParseError(_) | CouldNotRate => {

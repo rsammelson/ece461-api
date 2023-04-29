@@ -24,6 +24,8 @@ pub(in crate::scoring) async fn query<T: Into<github_query::Variables>>(
         .send()
         .await?;
 
+    log::debug!("resp: {:?}", response);
+
     response
         .json::<graphql_client::Response<github_query::ResponseData>>()
         .await?

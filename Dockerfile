@@ -10,11 +10,11 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 COPY --from=planner /api/recipe.json recipe.json
 # Build dependencies - this is the caching Docker layer!
+RUN apt-get update && apt-get install -y ca-certificates pkg-config libssl-dev
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
 RUN cargo build --release --bin api
-RUN apt-get update && apt-get install -y ca-certificates pkg-config libssl-dev
 
 # Run the web service on container startup.
 FROM debian:bullseye-slim AS runtime

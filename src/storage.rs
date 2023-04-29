@@ -67,8 +67,14 @@ impl CloudStorage {
     }
 
     pub async fn delete_all(&self) -> Result<(), Box<dyn std::error::Error>> {
-        for obj in self.list_objects().await? {
-            self.delete_object(obj.name.unwrap()).await?;
+        let names: Vec<_> = self
+            .list_objects()
+            .await?
+            .into_iter()
+            .map(|o| o.name.unwrap())
+            .collect();
+        for name in names {
+            self.delete_object(name).await?;
         }
 
         Ok(())
