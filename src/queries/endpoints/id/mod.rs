@@ -155,6 +155,8 @@ pub async fn update_package_by_id(
 pub async fn post_package(
     Json(data): Json<PackageData>,
 ) -> Result<MyResponse<Package>, StatusCode> {
+    let db = database::get_database().await;
+
     let RatedPackage {
         name,
         version,
@@ -169,16 +171,35 @@ pub async fn post_package(
         return Err(StatusCode::FAILED_DEPENDENCY);
     }
 
+    let query = db
+        .fluent()
+        .select()
+        .fields(PACKAGE_FIELDS)
+        .from(database::METADATA)
+        .limit(1)
+        .filter(|q| q.field(database::NAME).eq(&name));
+
+    let query_result = query.query().await.map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    if query_result.len() >= 1 {
+        return Err(StatusCode::CONFLICT);
+    }
+
     // upload to obj storage
-    let storage = CloudStorage::new()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let storage = CloudStorage::new().await.map_err(|e| {
+        log::error!("cloud storage handle error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let url = storage
         .put_object(name.clone(), content)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let db = database::get_database().await;
+        .map_err(|e| {
+            log::error!("cloud storage put error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let metadata = PackageMetadata { name, version, id };
 
