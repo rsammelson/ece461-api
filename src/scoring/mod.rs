@@ -14,8 +14,6 @@ use zip::ZipArchive;
 
 #[derive(thiserror::Error, Debug)]
 pub enum RatingError {
-    #[error("could not rate package")]
-    CouldNotRate,
     #[error("did not find a package.json")]
     MissingPackageJson,
     #[error("package.json did not contain a repository link")]
@@ -51,9 +49,8 @@ pub struct RatedPackage {
 
 pub async fn rate_package(package: PackageData) -> RatingResult<RatedPackage> {
     match package {
-        PackageData::Content(content) => Ok(from_content(content.into_bytes()).await?),
-        PackageData::Url(url) => from_url(&url).await,
-        _ => Err(CouldNotRate),
+        PackageData::Content { content } => Ok(from_content(content.into_bytes()).await?),
+        PackageData::Url { url } => from_url(&url).await,
     }
 }
 

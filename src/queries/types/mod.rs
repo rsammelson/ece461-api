@@ -52,13 +52,17 @@ impl Deref for PackageId {
 }
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum PackageData {
-    #[serde(rename = "Content")]
-    Content(String),
-    #[serde(rename = "URL")]
-    Url(String),
-    #[serde(rename = "JSProgram")]
-    JsProgram(String),
+    Content {
+        #[serde(rename = "Content")]
+        content: String,
+    },
+
+    Url {
+        #[serde(rename = "URL")]
+        url: String,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -71,7 +75,7 @@ impl From<database::DatabaseEntry> for Package {
     fn from(database::DatabaseEntry { metadata, url, .. }: database::DatabaseEntry) -> Self {
         Package {
             metadata,
-            data: PackageData::Url(url),
+            data: PackageData::Url { url },
         }
     }
 }

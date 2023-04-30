@@ -48,9 +48,7 @@ fn scoring_err_to_response(e: RatingError) -> StatusCode {
     log::error!("scoring error: {:?}", e);
     use RatingError::*;
     match e {
-        MissingPackageJson | MissingRepository | UrlParseError(_) | CouldNotRate => {
-            StatusCode::BAD_REQUEST
-        }
+        MissingPackageJson | MissingRepository | UrlParseError(_) => StatusCode::BAD_REQUEST,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
@@ -71,7 +69,7 @@ pub async fn get_package_by_id(
     let PackageWithUrl { metadata, url } = find_package_by_id(&db, id, PACKAGE_FIELDS).await?;
     Ok(ok(Package {
         metadata,
-        data: PackageData::Url(url),
+        data: PackageData::Url { url },
     }))
 }
 

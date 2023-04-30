@@ -48,7 +48,12 @@ fn des_ser_data_content() {
     let data = r#"{"Content":"abc"}"#;
 
     let deserialized: PackageData = serde_json::from_str(data).unwrap();
-    assert_eq!(deserialized, PackageData::Content("abc".to_string()));
+    assert_eq!(
+        deserialized,
+        PackageData::Content {
+            content: "abc".to_string()
+        }
+    );
 
     let serialized = serde_json::to_string(&deserialized).unwrap();
     assert_eq!(serialized, data);
@@ -61,21 +66,9 @@ fn des_ser_data_url() {
     let deserialized: PackageData = serde_json::from_str(data).unwrap();
     assert_eq!(
         deserialized,
-        PackageData::Url("https://example.com".to_string())
-    );
-
-    let serialized = serde_json::to_string(&deserialized).unwrap();
-    assert_eq!(serialized, data);
-}
-
-#[test]
-fn des_ser_data_js() {
-    let data = r#"{"JSProgram":"return 1 + 2;"}"#;
-
-    let deserialized: PackageData = serde_json::from_str(data).unwrap();
-    assert_eq!(
-        deserialized,
-        PackageData::JsProgram("return 1 + 2;".to_string())
+        PackageData::Url {
+            url: "https://example.com".to_string()
+        }
     );
 
     let serialized = serde_json::to_string(&deserialized).unwrap();
@@ -84,9 +77,42 @@ fn des_ser_data_js() {
 
 #[test]
 fn data_only_one_field() {
-    let data = r#"{"Content":"abc", "JSProgram":"return 1 + 2;"}"#;
+    let data = r#"{"Content":"abc", "URL":"return 1 + 2;"}"#;
+
+    let deserialized: PackageData = serde_json::from_str(data).unwrap();
+    assert_eq!(
+        deserialized,
+        PackageData::Content {
+            content: "abc".to_string()
+        }
+    );
+
+    let serialized = serde_json::to_string(&deserialized).unwrap();
+    assert_eq!(serialized, r#"{"Content":"abc"}"#)
+}
+
+#[test]
+fn data_one_field_null() {
+    let data = r#"{"Content":null, "URL":"abc", "JSProgram":"return 1 + 2;"}"#;
+
+    let deserialized: PackageData = serde_json::from_str(data).unwrap();
+    assert_eq!(
+        deserialized,
+        PackageData::Url {
+            url: "abc".to_string()
+        }
+    );
+
+    let serialized = serde_json::to_string(&deserialized).unwrap();
+    assert_eq!(serialized, r#"{"URL":"abc"}"#)
+}
+
+#[test]
+fn data_both_fields_null() {
+    let data = r#"{"Content":null, "URL":null, "JSProgram":null}"#;
+
     let deserialized: Result<PackageData, _> = serde_json::from_str(data);
     if let Ok(_) = deserialized {
-        panic!("Expected to only be able to set one of the fields of `data`");
+        panic!("Expected to not set any fields when all null");
     }
 }
